@@ -32,7 +32,6 @@ import joblib
 from sklearn.ensemble        import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model    import LinearRegression
 from sklearn.preprocessing   import StandardScaler
-from sklearn.model_selection import train_test_split
 from sklearn.metrics         import mean_squared_error, accuracy_score
 
 try:
@@ -43,8 +42,8 @@ except ImportError:
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import STOCKS, RANDOM_STATE, TRAIN_TEST_SPLIT, MODEL_DIR
-from database import fetch_all, get_connection
+from config import DATABASE_BACKEND, STOCKS, RANDOM_STATE, TRAIN_TEST_SPLIT, MODEL_DIR
+from database import fetch_all, fetch_one
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -53,7 +52,8 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 # Feature Engineering
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_features(df: pd.DataFrame, pagerank_score: float = 0.125) -> pd.DataFrame:
+def build_features(df: pd.DataFrame, pagerank_score: float = 0.125,
+                   include_latest: bool = False) -> pd.DataFrame:
     """
     Build the feature matrix from raw OHLCV + indicators.
     Adds lag features and rolling statistics.
@@ -77,7 +77,10 @@ def build_features(df: pd.DataFrame, pagerank_score: float = 0.125) -> pd.DataFr
     df['pagerank'] = pagerank_score
     df['open_close_ratio'] = df['open'] / (df['close'] + 1e-9)
 
-    df = df.dropna()
+    if include_latest:
+        df = df.dropna(subset=[col for col in FEATURE_COLS if col in df.columns])
+    else:
+        df = df.dropna()
     return df
 
 
@@ -122,12 +125,13 @@ class PredictionModel:
 
     def train(self, symbol: str) -> dict:
         """Train regressor + classifier for a single stock."""
-        df = self._load_data(symbol)
-        if df is None or len(df) < 60:
+        raw_df = self._load_data(symbol)
+        if raw_df is None or len(raw_df) < 60:
             raise ValueError(f"Not enough data for {symbol} (need ≥60 rows)")
 
+        data_as_of = str(raw_df['date'].iloc[-1])
         pagerank = self._get_pagerank(symbol)
-        df = build_features(df, pagerank)
+        df = build_features(raw_df, pagerank)
 
         # Keep only available feature columns
         avail_cols = [c for c in FEATURE_COLS if c in df.columns]
@@ -135,13 +139,11 @@ class PredictionModel:
         y_price = df['target_price'].values
         y_dir   = df['target_direction'].values
 
-        # Scale
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-
         # Train / test split (time-aware — no shuffle)
         split = int(len(X) * TRAIN_TEST_SPLIT)
-        X_tr, X_te = X_scaled[:split], X_scaled[split:]
+        scaler = StandardScaler()
+        X_tr = scaler.fit_transform(X[:split])
+        X_te = scaler.transform(X[split:])
         y_pr_tr, y_pr_te = y_price[:split], y_price[split:]
         y_di_tr, y_di_te = y_dir[:split],   y_dir[split:]
 
@@ -173,6 +175,23 @@ class PredictionModel:
         rf_cls.fit(X_tr, y_di_tr)
         y_cls_pred = rf_cls.predict(X_te)
         accuracy = float(accuracy_score(y_di_te, y_cls_pred))
+        baseline_direction = int(np.mean(y_di_tr) >= 0.5)
+        baseline_accuracy = float(accuracy_score(
+            y_di_te, np.full(len(y_di_te), baseline_direction)
+        ))
+        close_index = avail_cols.index('close')
+        baseline_rmse = float(np.sqrt(mean_squared_error(
+            y_pr_te, X[split:, close_index]
+        )))
+
+        # Refit the deployable models on all labeled rows after holdout evaluation.
+        scaler.fit(X)
+        X_all_scaled = scaler.transform(X)
+        rf_reg.fit(X_all_scaled, y_price)
+        lr.fit(X_all_scaled, y_price)
+        rf_cls.fit(X_all_scaled, y_dir)
+        if xgb_reg is not None:
+            xgb_reg.fit(X_all_scaled, y_price)
 
         # ── Store & Save ───────────────────────────────────────────────
         entry = {
@@ -182,7 +201,11 @@ class PredictionModel:
             'lr':     lr,
             'scaler': scaler,
             'features': avail_cols,
+            'data_as_of': data_as_of,
+            'database_backend': DATABASE_BACKEND,
             'metrics': {'rmse': rmse, 'accuracy': accuracy,
+                        'baseline_rmse': baseline_rmse,
+                        'baseline_accuracy': baseline_accuracy,
                         'train_size': split, 'test_size': len(X_te)},
         }
         self._models[symbol] = entry
@@ -195,7 +218,8 @@ class PredictionModel:
         Return next-day price prediction and direction for a stock.
         Auto-trains if model not found.
         """
-        if symbol not in self._models:
+        entry = self._models.get(symbol)
+        if entry is None or self._model_is_stale(symbol, entry):
             try:
                 self.train(symbol)
             except Exception as e:
@@ -207,7 +231,7 @@ class PredictionModel:
             return self._fallback_prediction(symbol, "No data in database")
 
         pagerank = self._get_pagerank(symbol)
-        df = build_features(df, pagerank)
+        df = build_features(df, pagerank, include_latest=True)
         if df.empty:
             return self._fallback_prediction(symbol, "Feature build failed")
 
@@ -238,6 +262,7 @@ class PredictionModel:
         return {
             'symbol':          symbol,
             'name':            STOCKS.get(symbol, {}).get('name', symbol),
+            'data_date':       str(df['date'].iloc[-1]),
             'current_price':   round(current_price, 2),
             'predicted_price': round(pred_price, 2),
             'change':          round(change, 2),
@@ -271,6 +296,15 @@ class PredictionModel:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+    def _model_is_stale(self, symbol: str, entry: dict) -> bool:
+        """Detect artifacts trained from older data or a different database."""
+        if entry.get('database_backend') != DATABASE_BACKEND or not entry.get('data_as_of'):
+            return True
+        latest = fetch_one(
+            "SELECT MAX(date) AS date FROM stocks WHERE company=?", (symbol,)
+        )
+        return not latest or str(latest['date']) != entry['data_as_of']
+
     def _load_data(self, symbol: str) -> pd.DataFrame | None:
         rows = fetch_all(
             "SELECT date,open,high,low,close,volume,ma20,ma50,rsi,macd,signal "
@@ -298,7 +332,7 @@ class PredictionModel:
     def _fallback_prediction(self, symbol: str, reason: str) -> dict:
         """Return a simple moving-average-based prediction when ML fails."""
         rows = fetch_all(
-            "SELECT close FROM stocks WHERE company=? ORDER BY date DESC LIMIT 20",
+            "SELECT date,close FROM stocks WHERE company=? ORDER BY date DESC LIMIT 20",
             (symbol,)
         )
         closes = [r['close'] for r in rows]
@@ -308,6 +342,7 @@ class PredictionModel:
         return {
             'symbol':          symbol,
             'name':            STOCKS.get(symbol, {}).get('name', symbol),
+            'data_date':       rows[0]['date'] if rows else None,
             'current_price':   round(current, 2),
             'predicted_price': round(pred, 2),
             'change':          round(pred - current, 2),

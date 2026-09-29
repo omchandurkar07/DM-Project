@@ -64,7 +64,7 @@
           <span class="mono text-cyan fw-bold">{{ result.symbol }}</span>
         </div>
         <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted fs-8">Current Close:</span>
+          <span class="text-muted fs-8">Current Close ({{ result.data_date }}):</span>
           <span class="mono fw-bold">₹{{ result.current_price }}</span>
         </div>
         <div class="d-flex justify-content-between mb-2">
@@ -103,7 +103,7 @@
       <!-- HERO PREDICTION CARD -->
       <div class="prediction-hero mb-4">
         <div class="text-muted text-uppercase fs-8 fw-bold mb-1" style="letter-spacing: 0.12em;">
-          Next-Day Market Forecast Signal
+          Next-Day Forecast · Data through {{ result.data_date }}
         </div>
 
         <div class="my-2">
@@ -145,7 +145,7 @@
           <!-- Model Confidence -->
           <div class="col-6 col-md-3">
             <div class="pred-mini-card">
-              <span class="pred-card-label">Model Confidence</span>
+              <span class="pred-card-label">Classifier Score, Not Accuracy</span>
               <span class="pred-card-value mono">{{ result.confidence }}%</span>
             </div>
           </div>
@@ -172,6 +172,25 @@
         {% endif %}
       </div>
 
+      {% if result.metrics and result.metrics.get('accuracy') is not none %}
+      <div class="glass-card mb-4">
+        <div class="card-body-styled d-flex flex-wrap gap-4">
+          <div>
+            <div class="text-muted fs-8">Holdout direction accuracy</div>
+            <div class="mono fw-bold">{{ (result.metrics.accuracy * 100)|round(1) }}%</div>
+          </div>
+          <div>
+            <div class="text-muted fs-8">Majority baseline accuracy</div>
+            <div class="mono fw-bold">{{ (result.metrics.baseline_accuracy * 100)|round(1) }}%</div>
+          </div>
+          <div>
+            <div class="text-muted fs-8">Holdout price RMSE / previous-close baseline</div>
+            <div class="mono fw-bold">₹{{ result.metrics.rmse|round(2) }} / ₹{{ result.metrics.baseline_rmse|round(2) }}</div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
       <!-- PRICE CHART CARD -->
       <div class="glass-card mb-4">
         <div class="card-header-styled">
@@ -192,7 +211,7 @@
         </div>
         <h3 class="fw-bold text-light mb-2">Ready to Run ML Prediction</h3>
         <p class="text-muted mx-auto" style="max-width: 480px;">
-          Select a stock from the left sidebar and click <strong>Predict Target Price</strong> to generate real-time AI forecasts powered by Random Forest &amp; XGBoost.
+          Select a stock and click <strong>Predict Target Price</strong> to forecast from the latest daily data stored in the database. Refresh historical data before relying on a new forecast.
         </p>
       </div>
     {% endif %}

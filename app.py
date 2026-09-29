@@ -9,7 +9,7 @@ import json, os, traceback
 from datetime import datetime
 
 from config import STOCKS, SECTOR_COLORS, SECRET_KEY, DEBUG, HOST, PORT, ADMIN_USERNAME, ADMIN_PASSWORD
-from database import init_db, get_connection, fetch_all, fetch_one, execute_query
+from database import init_db, get_connection, fetch_all, fetch_one, execute_query, save_market_quotes
 from models.data_collector import DataCollector
 from models.graph          import StockGraph
 from models.probability    import ProbabilityEngine
@@ -66,6 +66,28 @@ def index():
 
     try:
         for key, info in STOCKS.items():
+            quote = fetch_one(
+                "SELECT date,price,change,change_pct,high,low,volume,source "
+                "FROM market_quotes WHERE company=?", (key,)
+            )
+            if quote:
+                data_available = True
+                market_data.append({
+                    'symbol': key,
+                    'name': info['name'],
+                    'sector': info['sector'],
+                    'color': info.get('color', '#FFF'),
+                    'price': round(quote['price'], 2),
+                    'change': round(quote['change'], 2),
+                    'change_pct': round(quote['change_pct'], 2),
+                    'volume': quote['volume'],
+                    'high': round(quote['high'], 2),
+                    'low': round(quote['low'], 2),
+                    'date': quote['date'],
+                    'source': quote['source'],
+                })
+                continue
+
             rows = fetch_all(
                 "SELECT date,close,open,high,low,volume FROM stocks "
                 "WHERE company=? ORDER BY date DESC LIMIT 2", (key,)
@@ -87,6 +109,7 @@ def index():
                     'high':      round(cur['high'], 2),
                     'low':       round(cur['low'], 2),
                     'date':      cur['date'],
+                    'source':    'Historical database',
                 })
 
         recent_preds = fetch_all(
@@ -378,6 +401,21 @@ def api_market_ticker():
     """Lightweight market ticker data for the top bar."""
     data = []
     for key, info in STOCKS.items():
+        quote = fetch_one(
+            "SELECT date,price,`change`,change_pct,source FROM market_quotes WHERE company=?",
+            (key,)
+        )
+        if quote:
+            data.append({
+                'symbol': key,
+                'name': info['name'],
+                'price': round(quote['price'], 2),
+                'change_pct': round(quote['change_pct'], 2),
+                'date': quote['date'],
+                'source': quote['source'],
+            })
+            continue
+
         rows = fetch_all(
             "SELECT close FROM stocks WHERE company=? ORDER BY date DESC LIMIT 2",
             (key,)
@@ -391,6 +429,26 @@ def api_market_ticker():
                 'change_pct': round(chg_pct, 2),
             })
     return jsonify(data)
+
+
+@app.route('/api/refresh-quotes', methods=['POST'])
+def api_refresh_quotes():
+    """Refresh the cached market cards from Yahoo Finance daily bars."""
+    quotes, errors = collector.fetch_latest_quotes()
+    if quotes:
+        save_market_quotes(quotes)
+        return jsonify({
+            'success': True,
+            'quotes': quotes,
+            'errors': errors,
+            'source': 'Yahoo Finance',
+        })
+    return jsonify({
+        'success': False,
+        'quotes': {},
+        'errors': errors,
+        'error': 'Yahoo Finance did not return any quotes.',
+    }), 502
 
 
 @app.route('/api/rebuild-graph', methods=['POST'])

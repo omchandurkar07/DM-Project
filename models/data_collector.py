@@ -20,7 +20,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import STOCKS, DATA_PERIOD, BASE_DIR, ALPHA_VANTAGE_API_KEY
-from database import get_connection, init_db
+from database import execute_sql, get_connection, get_cursor, init_db
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -92,11 +92,48 @@ class DataCollector:
             df = self._synthetic_data(symbol_key)
         return df
 
+    def fetch_latest_quotes(self) -> tuple[dict[str, dict], dict[str, str]]:
+        """Fetch the latest daily quote for each stock from Yahoo Finance."""
+        quotes = {}
+        errors = {}
+
+        for key, info in STOCKS.items():
+            try:
+                history = yf.Ticker(info['symbol']).history(
+                    period='5d', auto_adjust=True
+                ).dropna(subset=['Close'])
+                if len(history) < 2:
+                    errors[key] = 'Yahoo returned fewer than two daily prices'
+                    continue
+
+                latest = history.iloc[-1]
+                previous = history.iloc[-2]
+                price = float(latest['Close'])
+                previous_price = float(previous['Close'])
+                if not np.isfinite(price) or price <= 0 or not np.isfinite(previous_price):
+                    errors[key] = 'Yahoo returned an invalid price'
+                    continue
+
+                change = price - previous_price
+                quotes[key] = {
+                    'date': history.index[-1].date().isoformat(),
+                    'price': round(price, 2),
+                    'change': round(change, 2),
+                    'change_pct': round(change / previous_price * 100, 2),
+                    'high': round(float(latest['High']), 2),
+                    'low': round(float(latest['Low']), 2),
+                    'volume': int(latest['Volume']),
+                }
+            except Exception as exc:
+                errors[key] = str(exc)[:200]
+
+        return quotes, errors
+
     def get_latest_price(self, symbol_key: str) -> float:
         """Return the most recent closing price from DB."""
         conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
+        cursor = get_cursor(conn)
+        execute_sql(cursor,
             "SELECT close FROM stocks WHERE company=? ORDER BY date DESC LIMIT 1",
             (symbol_key,)
         )
@@ -238,17 +275,17 @@ class DataCollector:
     def _store(self, key: str, df: pd.DataFrame):
         """Upsert rows into the stocks table after clearing existing ones."""
         conn = get_connection()
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
         
         # Clear existing data for this company to prevent mixing old/stale/synthetic data with new data
-        cursor.execute("DELETE FROM stocks WHERE company=?", (key,))
+        execute_sql(cursor, "DELETE FROM stocks WHERE company=?", (key,))
 
         for _, row in df.iterrows():
             try:
-                cursor.execute('''
+                execute_sql(cursor, '''
                     INSERT INTO stocks
                         (company, date, open, high, low, close,
-                         volume, ma20, ma50, rsi, macd, signal)
+                         volume, ma20, ma50, rsi, macd, `signal`)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     key,

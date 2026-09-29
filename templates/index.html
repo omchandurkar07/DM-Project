@@ -29,13 +29,24 @@
 {% endif %}
 
 <!-- Market Summary Cards Grid -->
-<div class="section-title">
-  <span class="dot"></span> Real-Time Stock Cards
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+  <div>
+    <div class="section-title mb-1">
+      <span class="dot"></span> Latest Daily Prices
+    </div>
+    <div id="quote-refresh-status" class="text-muted fs-8" role="status" aria-live="polite">
+      Quote date and source are shown on each card.
+    </div>
+  </div>
+  <button id="refresh-quotes-btn" class="btn btn-glow" type="button">
+    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+    <span>Refresh quotes</span>
+  </button>
 </div>
 <div class="row g-3 mb-5">
   {% for item in market_data %}
   <div class="col-xl-3 col-lg-4 col-md-6">
-    <div class="stock-card {% if item.change >= 0 %}up{% else %}down{% endif %}">
+    <div class="stock-card {% if item.change >= 0 %}up{% else %}down{% endif %}" data-stock-card="{{ item.symbol }}">
       <div class="d-flex justify-content-between align-items-start mb-2">
         <div>
           <div class="stock-symbol">{{ item.symbol }}</div>
@@ -47,11 +58,12 @@
       </div>
 
       <div class="d-flex justify-content-between align-items-baseline mt-3">
-        <div class="stock-price">₹{{ item.price }}</div>
-        <div class="stock-change {% if item.change >= 0 %}text-up{% else %}text-down{% endif %}">
+        <div class="stock-price" data-quote-price>₹{{ item.price }}</div>
+        <div class="stock-change {% if item.change >= 0 %}text-up{% else %}text-down{% endif %}" data-quote-change>
           {% if item.change >= 0 %}<i class="bi bi-caret-up-fill"></i>+{% else %}<i class="bi bi-caret-down-fill"></i>{% endif %}{{ item.change }} ({{ item.change_pct }}%)
         </div>
       </div>
+      <div class="text-muted fs-8 mt-1" data-quote-date>{{ item.source }} · {{ item.date }}</div>
 
       <!-- Sparkline Trend Chart -->
       <div class="my-3" style="height: 48px; position: relative;">
@@ -59,8 +71,8 @@
       </div>
 
       <div class="d-flex justify-content-between fs-7 mt-2 pt-2 text-muted border-top border-secondary border-opacity-25 card-stat-meta">
-        <span>High: ₹{{ item.high }}</span>
-        <span>Low: ₹{{ item.low }}</span>
+        <span>High: ₹<span data-quote-high>{{ item.high }}</span></span>
+        <span>Low: ₹<span data-quote-low>{{ item.low }}</span></span>
       </div>
 
       <div class="mt-3">
@@ -206,6 +218,56 @@
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
+    const refreshButton = document.getElementById('refresh-quotes-btn');
+    const quoteStatus = document.getElementById('quote-refresh-status');
+    if (refreshButton) {
+      refreshButton.addEventListener('click', async () => {
+        refreshButton.disabled = true;
+        quoteStatus.textContent = 'Fetching latest daily prices from Yahoo Finance…';
+
+        try {
+          const response = await fetch("{{ url_for('api_refresh_quotes') }}", { method: 'POST' });
+          const result = await response.json();
+          if (!response.ok || !result.success) throw new Error(result.error || 'Quote refresh failed.');
+
+          const formatPrice = (value) => Number(value).toLocaleString('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+          Object.entries(result.quotes).forEach(([symbol, quote]) => {
+            const card = document.querySelector(`[data-stock-card="${symbol}"]`);
+            if (!card) return;
+
+            card.querySelector('[data-quote-price]').textContent = `₹${formatPrice(quote.price)}`;
+            card.querySelector('[data-quote-date]').textContent = `${result.source} · ${quote.date}`;
+            card.querySelector('[data-quote-high]').textContent = formatPrice(quote.high);
+            card.querySelector('[data-quote-low]').textContent = formatPrice(quote.low);
+
+            const change = card.querySelector('[data-quote-change]');
+            const isUp = quote.change >= 0;
+            change.classList.toggle('text-up', isUp);
+            change.classList.toggle('text-down', !isUp);
+            change.replaceChildren();
+            const icon = document.createElement('i');
+            icon.className = `bi ${isUp ? 'bi-caret-up-fill' : 'bi-caret-down-fill'}`;
+            change.append(icon, document.createTextNode(`${isUp ? '+' : ''}${formatPrice(quote.change)} (${quote.change_pct}%)`));
+            card.classList.toggle('up', isUp);
+            card.classList.toggle('down', !isUp);
+          });
+
+          const updatedCount = Object.keys(result.quotes).length;
+          const errorCount = Object.keys(result.errors || {}).length;
+          quoteStatus.textContent = errorCount
+            ? `Updated ${updatedCount} quotes; ${errorCount} unavailable. Dates are shown per card.`
+            : `Updated ${updatedCount} quotes from Yahoo Finance. Dates are shown per card.`;
+        } catch (error) {
+          quoteStatus.textContent = `Refresh failed: ${error.message}`;
+        } finally {
+          refreshButton.disabled = false;
+        }
+      });
+    }
+
     const select = document.getElementById('home-chart-stock');
     if (select) {
       loadStockChart(select.value, 'home-stock-chart');

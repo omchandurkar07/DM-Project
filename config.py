@@ -15,6 +15,15 @@ ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 # Database
 # ─────────────────────────────────────────────
 DATABASE_PATH = os.path.join(BASE_DIR, 'stockprediction.db')
+DATABASE_BACKEND = os.getenv('DATABASE_BACKEND', 'sqlite').strip().lower()
+MYSQL_HOST = os.getenv('MYSQL_HOST', '127.0.0.1')
+MYSQL_PORT = int(os.getenv('MYSQL_PORT', '3306'))
+MYSQL_USER = os.getenv('MYSQL_USER', 'root')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '')
+MYSQL_DATABASE = os.getenv('MYSQL_DATABASE', 'stock_prediction')
+MYSQL_AUTO_CREATE_DATABASE = os.getenv('MYSQL_AUTO_CREATE_DATABASE', 'false').strip().lower() in {
+    '1', 'true', 'yes', 'on'
+}
 
 # ─────────────────────────────────────────────
 # Stock Universe — Indian NSE Stocks

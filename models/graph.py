@@ -89,7 +89,7 @@ class StockGraph:
                     self.G.add_edge(a, b, weight=abs_w,
                                     correlation=weight, edge_type=edge_type)
                     execute_query(
-                        "INSERT OR REPLACE INTO graph_edges "
+                        "INSERT INTO graph_edges "
                         "(company_a, company_b, weight, edge_type) VALUES (?,?,?,?)",
                         (a, b, round(abs_w, 4), edge_type)
                     )
