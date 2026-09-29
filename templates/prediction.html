@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block title %}Stock Prediction — StockGraph{% endblock %}
+
+{% block content %}
+<div class="page-header py-2 mb-4">
+  <h1 class="gradient-text"><i class="bi bi-cpu me-2"></i> Stock Price &amp; Direction Predictor</h1>
+  <p>Select an Indian stock to compute graph-boosted Machine Learning price target and Bayesian probability.</p>
+</div>
+
+<div class="row g-4">
+  <!-- Left Side: Controls & Selector -->
+  <div class="col-lg-4">
+    <div class="glass-card mb-4">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-sliders me-2 text-info"></i> Prediction Parameters</div>
+      </div>
+      <div class="card-body-styled">
+        <form action="{{ url_for('predict_page') }}" method="GET" id="predict-form">
+          <input type="hidden" name="predict" value="true">
+          <div class="mb-3">
+            <label class="form-label text-muted fs-8 fw-semibold text-uppercase">Select Company</label>
+            <select name="symbol" id="stock-select" class="form-select form-select-dark w-100">
+              {% for key, info in stocks.items() %}
+              <option value="{{ key }}" {% if selected == key %}selected{% endif %}>
+                {{ key }} — {{ info.name }} ({{ info.sector }})
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label text-muted fs-8 fw-semibold text-uppercase">Market Sentiment Event (Bayesian)</label>
+            <select name="event" id="event-select" class="form-select form-select-dark w-100">
+              <option value="" {% if not result or not result.probability or not result.probability.event %}selected{% endif %}>None (Standard Market)</option>
+              <option value="positive" {% if result and result.probability and result.probability.event == 'positive' %}selected{% endif %}>Positive Sector News (Bullish Update)</option>
+              <option value="negative" {% if result and result.probability and result.probability.event == 'negative' %}selected{% endif %}>Negative Sector News (Bearish Update)</option>
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-glow w-100 py-2" id="predict-submit-btn">
+            <i class="bi bi-lightning-charge-fill me-1"></i> Predict Target Price
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Quick Stock Info Card -->
+    {% if result and not result.error %}
+    <div class="glass-card">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-info-circle me-2 text-cyan"></i> Stock Profile</div>
+        <span class="stock-sector-badge" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">
+          {{ stocks[result.symbol].sector }}
+        </span>
+      </div>
+      <div class="card-body-styled">
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted fs-8">Company:</span>
+          <span class="fw-semibold text-end">{{ result.name }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted fs-8">Symbol:</span>
+          <span class="mono text-cyan fw-bold">{{ result.symbol }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted fs-8">Current Close:</span>
+          <span class="mono fw-bold">₹{{ result.current_price }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted fs-8">Algorithm:</span>
+          <span class="badge bg-secondary bg-opacity-50 text-light fs-8">{{ result.algorithm_used }}</span>
+        </div>
+
+        {% if result.top_features %}
+        <div class="mt-3 pt-3 border-top border-secondary border-opacity-25">
+          <div class="text-muted fs-8 fw-semibold text-uppercase mb-2">Top Feature Importance</div>
+          {% for feat in result.top_features %}
+          <div class="d-flex justify-content-between align-items-center mb-1 fs-8">
+            <span class="mono text-muted">{{ feat.feature }}</span>
+            <span class="mono text-info">{{ (feat.importance * 100)|round(1) }}%</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Right Side: Hero Results & Detailed Graphs -->
+  <div class="col-lg-8">
+    {% if result %}
+      {% if result.error %}
+        <div class="alert alert-glass error mb-4">
+          <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+          <div>
+            <strong>Prediction Error:</strong> {{ result.error }}
+          </div>
+        </div>
+      {% else %}
+
+      <!-- HERO PREDICTION CARD -->
+      <div class="prediction-hero mb-4">
+        <div class="text-muted text-uppercase fs-8 fw-bold mb-1" style="letter-spacing: 0.12em;">
+          Next-Day Market Forecast Signal
+        </div>
+
+        <div class="my-2">
+          <div class="pred-signal-badge {% if result.direction == 'UP' %}up{% else %}down{% endif %}">
+            {% if result.direction == 'UP' %}
+              <i class="bi bi-arrow-up-circle-fill me-2"></i>BUY / UP
+            {% else %}
+              <i class="bi bi-arrow-down-circle-fill me-2"></i>SELL / DOWN
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Predict Summary Statistics Grid -->
+        <div class="row g-3 my-3">
+          <!-- Current Price -->
+          <div class="col-6 col-md-3">
+            <div class="pred-mini-card">
+              <span class="pred-card-label">Current Price</span>
+              <span class="pred-card-value mono">₹{{ result.current_price }}</span>
+            </div>
+          </div>
+          <!-- Predicted Target -->
+          <div class="col-6 col-md-3">
+            <div class="pred-mini-card highlighted-target">
+              <span class="pred-card-label">Predicted Target</span>
+              <span class="pred-card-value mono">₹{{ result.predicted_price }}</span>
+            </div>
+          </div>
+          <!-- Expected Profit / Loss -->
+          <div class="col-6 col-md-3">
+            <div class="pred-mini-card {% if result.change >= 0 %}profit-up{% else %}profit-down{% endif %}">
+              <span class="pred-card-label">{% if result.change >= 0 %}Expected Profit{% else %}Expected Loss{% endif %}</span>
+              <span class="pred-card-value mono">
+                {% if result.change >= 0 %}+{% else %}-{% endif %}₹{{ result.change|abs }}
+                <span class="pct">({{ result.change_pct|abs }}%)</span>
+              </span>
+            </div>
+          </div>
+          <!-- Model Confidence -->
+          <div class="col-6 col-md-3">
+            <div class="pred-mini-card">
+              <span class="pred-card-label">Model Confidence</span>
+              <span class="pred-card-value mono">{{ result.confidence }}%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PROBABILITY GAUGE BAR -->
+        {% if result.probability %}
+        <div class="mt-4 pt-3 border-top border-secondary border-opacity-25 text-start">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="fs-8 text-muted fw-bold">BAYESIAN PROBABILITY: P(UP) vs P(DOWN)</span>
+            <span class="fs-8 mono fw-bold text-up">{{ result.probability.p_up_pct }}% UP</span>
+          </div>
+
+          <div class="prob-bar-track">
+            <div class="prob-bar-fill {% if result.direction == 'UP' %}up{% else %}down{% endif %}"
+                 style="width: {{ result.probability.p_up_pct }}%;"></div>
+          </div>
+
+          <div class="d-flex justify-content-between mt-2 fs-8 text-muted">
+            <span>Signal: <strong class="text-light">{{ result.probability.signal }}</strong></span>
+            <span>Rolling Window: <strong>100 Trading Days</strong></span>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- PRICE CHART CARD -->
+      <div class="glass-card mb-4">
+        <div class="card-header-styled">
+          <div class="fw-bold"><i class="bi bi-graph-up-arrow me-2 text-cyan"></i> {{ result.symbol }} Price History &amp; Target</div>
+          <span class="fs-8 text-muted">Last 180 Days</span>
+        </div>
+        <div class="card-body-styled">
+          <div id="prediction-stock-chart" style="height: 350px; width: 100%;"></div>
+        </div>
+      </div>
+
+      {% endif %}
+    {% else %}
+      <!-- Initial State (No prediction requested yet) -->
+      <div class="glass-card text-center py-5 px-4">
+        <div class="mb-3">
+          <i class="bi bi-cpu text-info" style="font-size: 3.5rem;"></i>
+        </div>
+        <h3 class="fw-bold text-light mb-2">Ready to Run ML Prediction</h3>
+        <p class="text-muted mx-auto" style="max-width: 480px;">
+          Select a stock from the left sidebar and click <strong>Predict Target Price</strong> to generate real-time AI forecasts powered by Random Forest &amp; XGBoost.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% if result and not result.error %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    loadStockChart("{{ result.symbol }}", "prediction-stock-chart", {{ result.predicted_price }});
+  });
+</script>
+{% endif %}
+{% endblock %}

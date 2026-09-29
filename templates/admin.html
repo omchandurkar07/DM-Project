@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin Panel — StockGraph{% endblock %}
+
+{% block content %}
+<div class="page-header py-2 mb-4">
+  <h1 class="gradient-text"><i class="bi bi-gear-wide-connected me-2"></i> System Admin &amp; Data Pipeline Management</h1>
+  <p>Control center for data ingestion, network graph construction, and machine learning model retraining.</p>
+</div>
+
+<!-- Flash Messages -->
+{% for msg in messages %}
+<div class="alert alert-glass {{ msg.type }} mb-4">
+  <i class="bi {% if msg.type == 'success' %}bi-check-circle-fill{% else %}bi-exclamation-octagon-fill{% endif %} fs-4"></i>
+  <div>{{ msg.text }}</div>
+</div>
+{% endfor %}
+
+<!-- Quick Statistics Bar -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="glass-card text-center p-3">
+      <div class="stat-value text-cyan">{{ stock_count }}</div>
+      <div class="stat-label">Historical Stock Rows</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="glass-card text-center p-3">
+      <div class="stat-value text-purple">{{ edge_count }}</div>
+      <div class="stat-label">Active Graph Edges</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="glass-card text-center p-3">
+      <div class="stat-value text-warning">{{ pred_count }}</div>
+      <div class="stat-label">Saved Predictions</div>
+    </div>
+  </div>
+</div>
+
+<!-- Pipeline Action Cards -->
+<div class="row g-4 mb-4">
+  <!-- Run Full Pipeline -->
+  <div class="col-12">
+    <div class="glass-card p-4 text-center border-info border-opacity-50">
+      <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3">
+        <div class="text-start">
+          <h4 class="fw-bold text-light mb-1"><i class="bi bi-rocket-takeoff text-info me-2"></i> Run Complete Automated Pipeline</h4>
+          <p class="text-muted fs-8 mb-0">Fetches yfinance quotes, builds correlation graph, calculates PageRank, and trains all ML models in one click.</p>
+        </div>
+        <form action="{{ url_for('admin_page') }}" method="POST">
+          <input type="hidden" name="action" value="full_pipeline" />
+          <button type="submit" class="btn btn-glow py-2 px-4 text-nowrap">
+            <i class="bi bi-play-circle-fill me-1"></i> Run Full Pipeline
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Individual Step 1: Data Fetch -->
+  <div class="col-md-4">
+    <div class="glass-card h-100">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-cloud-arrow-down text-info me-2"></i> Step 1: Fetch Stock Data</div>
+      </div>
+      <div class="card-body-styled d-flex flex-column justify-content-between">
+        <p class="text-muted fs-8">Downloads historical prices from Yahoo Finance API and calculates technical indicators (MA20, MA50, RSI, MACD).</p>
+        <form action="{{ url_for('admin_page') }}" method="POST">
+          <input type="hidden" name="action" value="refresh_data" />
+          <button type="submit" class="btn btn-glass w-100">
+            <i class="bi bi-arrow-repeat me-1"></i> Refresh Stock Data
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Individual Step 2: Graph Rebuild -->
+  <div class="col-md-4">
+    <div class="glass-card h-100">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-diagram-3 text-purple me-2"></i> Step 2: Rebuild Graph</div>
+      </div>
+      <div class="card-body-styled d-flex flex-column justify-content-between">
+        <p class="text-muted fs-8">Computes Pearson return correlation matrix, creates network edges (|r| &ge; 0.4), and updates PageRank scores.</p>
+        <form action="{{ url_for('admin_page') }}" method="POST">
+          <input type="hidden" name="action" value="rebuild_graph" />
+          <button type="submit" class="btn btn-glass w-100">
+            <i class="bi bi-diagram-2 me-1"></i> Rebuild Graph
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Individual Step 3: Model Retraining -->
+  <div class="col-md-4">
+    <div class="glass-card h-100">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-cpu text-warning me-2"></i> Step 3: Train ML Models</div>
+      </div>
+      <div class="card-body-styled d-flex flex-column justify-content-between">
+        <p class="text-muted fs-8">Fits Random Forest and XGBoost regressors/classifiers using features + graph PageRank scores.</p>
+        <form action="{{ url_for('admin_page') }}" method="POST">
+          <input type="hidden" name="action" value="train_model" />
+          <button type="submit" class="btn btn-glass w-100">
+            <i class="bi bi-gear me-1"></i> Train Models
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Saved Models Status -->
+<div class="glass-card">
+  <div class="card-header-styled">
+    <div class="fw-bold"><i class="bi bi-folder-check text-success me-2"></i> Saved Machine Learning Models</div>
+  </div>
+  <div class="card-body-styled">
+    {% if model_files %}
+    <div class="row g-2">
+      {% for mf in model_files %}
+      <div class="col-md-3 col-6">
+        <div class="p-2 bg-card border border-secondary border-opacity-25 rounded mono fs-8 d-flex align-items-center gap-2">
+          <i class="bi bi-file-earmark-code text-cyan fs-6"></i>
+          <span class="text-truncate">{{ mf }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-muted fs-8">No saved model pickle files found. Run step 3 to train and save models.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('form').forEach(form => {
+  form.addEventListener('submit', function() {
+    const btn = this.querySelector('button[type="submit"]');
+    if (btn) {
+      // Keep width fixed during transition
+      btn.style.width = btn.offsetWidth + 'px';
+      btn.disabled = true;
+      btn.innerHTML = `<i class="bi bi-arrow-repeat spin-loader me-1"></i> Processing...`;
+    }
+  });
+});
+</script>
+
+<style>
+.spin-loader {
+  display: inline-block;
+  animation: spin-anim 1s linear infinite;
+}
+@keyframes spin-anim {
+  100% { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}

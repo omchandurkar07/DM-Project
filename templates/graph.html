@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Stock Network Graph — StockGraph{% endblock %}
+
+{% block extra_head %}
+{% endblock %}
+
+{% block content %}
+<div class="row align-items-center mb-4">
+  <div class="col-md-8">
+    <div class="page-header py-2">
+      <h1 class="gradient-text"><i class="bi bi-diagram-3-fill me-2"></i>Stock Correlation Network</h1>
+      <p class="mb-0">Explore pairwise company co-movements and sector relationships modeled as a weighted undirected graph.</p>
+    </div>
+  </div>
+  <div class="col-md-4 text-md-end mt-3 mt-md-0">
+    <button id="btn-rebuild-graph" class="btn btn-glass" title="Recompute correlation matrix and rebuild edges">
+      <i class="bi bi-arrow-clockwise me-1"></i> Rebuild Graph
+    </button>
+  </div>
+</div>
+
+<div class="row g-4">
+  <!-- Left Side: D3 Force-Directed Canvas -->
+  <div class="col-lg-8">
+    <div class="glass-card h-100">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-eye text-info me-2"></i> Correlation Network Graph</div>
+        <div class="d-flex gap-2">
+          <button id="btn-zoom-fit" class="btn btn-glass btn-sm py-1"><i class="bi bi-arrows-angle-expand"></i> Zoom Fit</button>
+          <button id="btn-clear-highlight" class="btn btn-glass btn-sm py-1 text-warning"><i class="bi bi-x-circle"></i> Clear Highlight</button>
+        </div>
+      </div>
+      <div class="card-body-styled p-0 position-relative" style="height: 520px;">
+        <!-- D3 Canvas Container -->
+        <div id="graph-container" style="width: 100%; height: 100%; overflow: hidden;"></div>
+        <!-- Tooltip -->
+        <div id="tooltip" class="graph-tooltip d-none"></div>
+      </div>
+      <!-- Graph Legend -->
+      <div class="card-footer-styled bg-transparent border-top border-secondary border-opacity-25 p-3">
+        <div class="d-flex flex-wrap justify-content-center gap-4 small text-muted">
+          <div class="d-flex align-items-center gap-2">
+            <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--accent-cyan);"></span> Node = Ticker (Size = PageRank)
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span style="display:inline-block; width:20px; height:3px; background:#10b981;"></span> Solid Green = Positive Correlation (&ge; 0.4)
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span style="display:inline-block; width:20px; height:3px; border-top: 2px dashed #ef4444;"></span> Dashed Red = Negative Correlation (&le; -0.4)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Side: Metrics & Algorithm controls -->
+  <div class="col-lg-4">
+    <div class="d-flex flex-column gap-4">
+      <!-- Graph Stats -->
+      <div class="glass-card">
+        <div class="card-header-styled">
+          <div class="fw-bold"><i class="bi bi-calculator text-purple me-2"></i> Graph Metrics</div>
+        </div>
+        <div class="card-body-styled">
+          <div class="row g-2">
+            <div class="col-4">
+              <div class="stat-item p-2">
+                <div id="val-nodes" class="stat-value text-info fs-5">-</div>
+                <div class="stat-label" style="font-size: 8px;">Nodes</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stat-item p-2">
+                <div id="val-edges" class="stat-value text-warning fs-5">-</div>
+                <div class="stat-label" style="font-size: 8px;">Edges</div>
+              </div>
+            </div>
+            <div class="col-4">
+              <div class="stat-item p-2">
+                <div id="val-density" class="stat-value text-purple fs-5">-</div>
+                <div class="stat-label" style="font-size: 8px;">Density</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Algorithm Runner -->
+      <div class="glass-card">
+        <div class="card-header-styled">
+          <div class="fw-bold"><i class="bi bi-play-circle text-success me-2"></i> Algorithm Runner</div>
+        </div>
+        <div class="card-body-styled">
+          <!-- Selection -->
+          <div class="mb-3">
+            <label for="select-algo" class="form-label text-muted small">Select Graph Algorithm</label>
+            <select id="select-algo" class="form-select form-select-dark w-100" aria-label="Select Graph Algorithm">
+              <option value="bfs">Breadth-First Search (BFS)</option>
+              <option value="dfs">Depth-First Search (DFS)</option>
+              <option value="dijkstra" selected>Dijkstra (Strongest Influence Path)</option>
+              <option value="pagerank">PageRank Influence Ranking</option>
+              <option value="mst">Minimum Spanning Tree (MST)</option>
+            </select>
+          </div>
+
+          <!-- Parameter: Start Node -->
+          <div class="mb-3" id="param-start-container">
+            <label for="select-start" class="form-label text-muted small">Start Ticker</label>
+            <select id="select-start" class="form-select form-select-dark w-100" aria-label="Start Ticker">
+              {% for ticker in stocks %}
+              <option value="{{ ticker }}" {% if ticker == 'TCS' %}selected{% endif %}>{{ ticker }} - {{ stocks[ticker].name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Parameter: End Node -->
+          <div class="mb-3" id="param-end-container">
+            <label for="select-end" class="form-label text-muted small">Target Ticker</label>
+            <select id="select-end" class="form-select form-select-dark w-100" aria-label="Target Ticker">
+              {% for ticker in stocks %}
+              <option value="{{ ticker }}" {% if ticker == 'RELIANCE' %}selected{% endif %}>{{ ticker }} - {{ stocks[ticker].name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Run Button -->
+          <button id="btn-run-algo" class="btn btn-glow w-100">
+            <i class="bi bi-cpu-fill me-1"></i> Compute Algorithm
+          </button>
+        </div>
+      </div>
+
+      <!-- Console / Results Output -->
+      <div class="glass-card">
+        <div class="card-header-styled">
+          <div class="fw-bold"><i class="bi bi-terminal text-warning me-2"></i> Traversal Output</div>
+        </div>
+        <div class="card-body-styled p-3">
+          <div id="algo-description" class="small text-muted mb-3 italic">
+            Select an algorithm and click Compute to run graph calculations on the stock relationship network.
+          </div>
+          <div id="algo-output" class="mono fs-8 text-cyan border border-secondary border-opacity-25 rounded p-2" style="background: rgba(0,0,0,0.4); max-height: 200px; overflow-y: auto;">
+            [Ready] Waiting for algorithm execution...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/graph_viz.js') }}"></script>
+{% endblock %}

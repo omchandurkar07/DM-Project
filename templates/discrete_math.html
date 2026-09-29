@@ -1,0 +1,490 @@
+{% extends 'base.html' %}
+
+{% block title %}Discrete Mathematics Engine — StockGraph{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 gradient-text font-weight-bold mb-1">
+      <i class="bi bi-calculator me-2"></i>Discrete Mathematics Engine
+    </h1>
+    <p class="text-muted small mb-0">
+      Graph Theory · Propositional Logic · Combinatorics · Set Theory · Recurrence Relations
+    </p>
+  </div>
+  <span class="badge bg-primary px-3 py-2 text-wrap shadow-sm">
+    <i class="bi bi-cpu me-1"></i> CSE Core Discrete Math Modules
+  </span>
+</div>
+
+<!-- Nav Tabs -->
+<ul class="nav nav-pills custom-pills mb-4" id="dmTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-graph-btn" data-bs-toggle="pill" data-bs-target="#tab-graph" type="button" role="tab" aria-controls="tab-graph" aria-selected="true">
+      <i class="bi bi-diagram-3 me-1"></i>1. Advanced Graph Theory
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-logic-btn" data-bs-toggle="pill" data-bs-target="#tab-logic" type="button" role="tab" aria-controls="tab-logic" aria-selected="false">
+      <i class="bi bi-node-plus me-1"></i>2. Boolean Logic & Rules
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-combo-btn" data-bs-toggle="pill" data-bs-target="#tab-combo" type="button" role="tab" aria-controls="tab-combo" aria-selected="false">
+      <i class="bi bi-grid-3x3-gap me-1"></i>3. Combinatorics C(N,K)
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-sets-btn" data-bs-toggle="pill" data-bs-target="#tab-sets" type="button" role="tab" aria-controls="tab-sets" aria-selected="false">
+      <i class="bi bi-intersect me-1"></i>4. Set Theory & Poset
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-recurrence-btn" data-bs-toggle="pill" data-bs-target="#tab-recurrence" type="button" role="tab" aria-controls="tab-recurrence" aria-selected="false">
+      <i class="bi bi-arrow-repeat me-1"></i>5. Recurrence & Difference Eq
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="dmTabsContent">
+
+  <!-- ══ 1. ADVANCED GRAPH THEORY ═════════════════════════════════════════ -->
+  <div class="tab-pane fade show active" id="tab-graph" role="tabpanel" aria-labelledby="tab-graph-btn">
+    <div class="row g-4">
+
+      <!-- Graph Coloring -->
+      <div class="col-md-6">
+        <div class="card glass-card h-100">
+          <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+            <h5 class="card-title text-info mb-0">
+              <i class="bi bi-palette me-2"></i>Graph Coloring Portfolio Diversification
+            </h5>
+            <span class="badge bg-info text-dark">Greedy Coloring</span>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-3">
+              {{ graph_res.graph_coloring.explanation }}
+            </p>
+
+            <div class="mb-3">
+              <span class="text-white fw-bold">Colors (Independent Sets) Required:</span>
+              <span class="badge bg-secondary ms-2 fs-6">{{ graph_res.graph_coloring.num_colors_used }}</span>
+            </div>
+
+            <div class="list-group list-group-flush">
+              {% for p in graph_res.graph_coloring.portfolios %}
+              <div class="list-group-item bg-transparent text-white border-secondary px-0">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <span class="badge bg-cyan-accent text-dark me-2">Set {{ p.color_id + 1 }}</span>
+                    {% for s in p.stocks %}
+                    <span class="badge bg-dark border border-secondary text-info me-1">{{ s }}</span>
+                    {% endfor %}
+                  </div>
+                  <span class="small text-muted">{{ p.size }} stocks</span>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Maximal Cliques -->
+      <div class="col-md-6">
+        <div class="card glass-card h-100">
+          <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+            <h5 class="card-title text-warning mb-0">
+              <i class="bi bi-people-fill me-2"></i>Bron-Kerbosch Maximal Cliques
+            </h5>
+            <span class="badge bg-warning text-dark">Contagion Clusters</span>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-3">
+              {{ graph_res.maximal_cliques.explanation }}
+            </p>
+
+            <div class="mb-3">
+              <span class="text-white fw-bold">Total Maximal Cliques Found:</span>
+              <span class="badge bg-warning text-dark ms-2 fs-6">{{ graph_res.maximal_cliques.count }}</span>
+            </div>
+
+            {% for c in graph_res.maximal_cliques.top_cliques %}
+            <div class="p-3 mb-2 rounded bg-dark border border-warning-subtle">
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <span class="text-warning fw-bold me-2">Clique #{{ loop.index }}:</span>
+                  {% for s in c.stocks %}
+                  <span class="badge bg-secondary me-1">{{ s }}</span>
+                  {% endfor %}
+                </div>
+                <span class="badge bg-warning text-dark">{{ c.size }}-Node Complete Subgraph K_{{ c.size }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Community Clusters -->
+      <div class="col-12">
+        <div class="card glass-card">
+          <div class="card-header bg-transparent border-0">
+            <h5 class="card-title text-success mb-0">
+              <i class="bi bi-share me-2"></i>Greedy Modularity Community Partitioning
+            </h5>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-3">
+              {{ graph_res.communities.explanation }}
+            </p>
+            <div class="row g-3">
+              {% for comm in graph_res.communities.clusters %}
+              <div class="col-md-4">
+                <div class="p-3 rounded bg-dark border border-success">
+                  <h6 class="text-success font-weight-bold mb-2">
+                    Community Cluster #{{ comm.community_id }}
+                  </h6>
+                  <div class="d-flex flex-wrap gap-1">
+                    {% for s in comm.stocks %}
+                    <span class="badge bg-success-subtle text-success border border-success px-2 py-1">{{ s }}</span>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ 2. BOOLEAN LOGIC & PROPOSITIONAL CALCULUS ════════════════════════ -->
+  <div class="tab-pane fade" id="tab-logic" role="tabpanel">
+    <div class="card glass-card mb-4">
+      <div class="card-header bg-transparent border-0">
+        <h5 class="card-title text-primary mb-0">
+          <i class="bi bi-sliders me-2"></i>Interactive Boolean Logic State Selector
+        </h5>
+      </div>
+      <div class="card-body">
+        <form method="GET" action="{{ url_for('discrete_math_page') }}#tab-logic">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <div class="form-check form-switch p-3 border rounded border-secondary bg-dark">
+                <input class="form-check-input ms-0 me-2" type="checkbox" name="p" value="1" id="pSwitch" {% if logic_res.input_states.P_HighVol %}checked{% endif %}>
+                <label class="form-check-label text-white fw-bold" for="pSwitch">P: High Market Volatility</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check form-switch p-3 border rounded border-secondary bg-dark">
+                <input class="form-check-input ms-0 me-2" type="checkbox" name="q" value="1" id="qSwitch" {% if logic_res.input_states.Q_Uptrend %}checked{% endif %}>
+                <label class="form-check-label text-white fw-bold" for="qSwitch">Q: Stock Uptrend Active</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check form-switch p-3 border rounded border-secondary bg-dark">
+                <input class="form-check-input ms-0 me-2" type="checkbox" name="r" value="1" id="rSwitch" {% if logic_res.input_states.R_RSI_Oversold %}checked{% endif %}>
+                <label class="form-check-label text-white fw-bold" for="rSwitch">R: RSI Oversold Signal</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check form-switch p-3 border rounded border-secondary bg-dark">
+                <input class="form-check-input ms-0 me-2" type="checkbox" name="s" value="1" id="sSwitch" {% if logic_res.input_states.S_HighVolume %}checked{% endif %}>
+                <label class="form-check-label text-white fw-bold" for="sSwitch">S: High Volume Surge</label>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3 text-end">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-play-fill me-1"></i>Evaluate Propositional Formulas
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Evaluated Formulas -->
+    <div class="row g-4 mb-4">
+      {% for name, info in logic_res.evaluation.items() %}
+      <div class="col-md-4">
+        <div class="card glass-card text-center h-100 border-{% if info.result %}success{% else %}danger{% endif %}">
+          <div class="card-body">
+            <h6 class="text-muted text-uppercase small">{{ name.replace('_', ' ') }}</h6>
+            <div class="my-2 fs-5 font-monospace text-info">{{ info.formula }}</div>
+            <div class="display-6 my-2">
+              {% if info.result %}
+              <span class="badge bg-success">TRUE</span>
+              {% else %}
+              <span class="badge bg-danger">FALSE</span>
+              {% endif %}
+            </div>
+            <p class="mb-0 fw-bold text-white">{{ info.action }}</p>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Truth Table -->
+    <div class="card glass-card">
+      <div class="card-header bg-transparent border-0">
+        <h5 class="card-title text-info mb-0">
+          <i class="bi bi-table me-2"></i>Propositional Calculus Truth Table (16-State Matrix Sample)
+        </h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0 text-center align-middle">
+            <thead>
+              <tr class="table-active">
+                <th>P (Vol)</th>
+                <th>Q (Trend)</th>
+                <th>R (RSI)</th>
+                <th>S (Volm)</th>
+                <th>(¬P) ∧ Q ∧ R</th>
+                <th>Q ∧ S ∧ (¬P ∨ R)</th>
+                <th>P ∨ (¬Q ∧ ¬R)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in logic_res.truth_table %}
+              <tr>
+                <td><span class="badge bg-{% if row.P_HighVol %}success{% else %}secondary{% endif %}">{{ row.P_HighVol }}</span></td>
+                <td><span class="badge bg-{% if row.Q_Uptrend %}success{% else %}secondary{% endif %}">{{ row.Q_Uptrend }}</span></td>
+                <td><span class="badge bg-{% if row.R_RSI_Oversold %}success{% else %}secondary{% endif %}">{{ row.R_RSI_Oversold }}</span></td>
+                <td><span class="badge bg-{% if row.S_HighVolume %}success{% else %}secondary{% endif %}">{{ row.S_HighVolume }}</span></td>
+                <td><span class="badge bg-{% if row.Strat_A_Buy %}success{% else %}danger{% endif %}">{{ row.Strat_A_Buy }}</span></td>
+                <td><span class="badge bg-{% if row.Strat_B_Breakout %}success{% else %}danger{% endif %}">{{ row.Strat_B_Breakout }}</span></td>
+                <td><span class="badge bg-{% if row.Strat_C_HedgeAlert %}warning text-dark{% else %}secondary{% endif %}">{{ row.Strat_C_HedgeAlert }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 3. COMBINATORICS & COUNTING THEORY ═══════════════════════════════ -->
+  <div class="tab-pane fade" id="tab-combo" role="tabpanel">
+    <div class="card glass-card mb-4">
+      <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+        <h5 class="card-title text-success mb-0">
+          <i class="bi bi-calculator me-2"></i>Combinatorial C(N, K) Sub-Portfolio Selection
+        </h5>
+        <form method="GET" action="{{ url_for('discrete_math_page') }}#tab-combo" class="d-flex align-items-center gap-2">
+          <label class="text-muted small mb-0">Choose Portfolio Size K:</label>
+          <select name="k" class="form-select form-select-sm bg-dark text-white border-secondary select-stock-dropdown" title="Choose portfolio size K" aria-label="Choose portfolio size K" onchange="this.form.submit()">
+            <option value="2" {% if selected_k == 2 %}selected{% endif %}>K = 2</option>
+            <option value="3" {% if selected_k == 3 %}selected{% endif %}>K = 3</option>
+            <option value="4" {% if selected_k == 4 %}selected{% endif %}>K = 4</option>
+          </select>
+        </form>
+      </div>
+      <div class="card-body">
+        <div class="p-3 bg-dark rounded border border-success mb-4 d-flex justify-content-around text-center">
+          <div>
+            <div class="text-muted small">Total Available Stocks N</div>
+            <div class="h3 text-white mb-0">{{ combo_res.total_stocks_N }}</div>
+          </div>
+          <div class="vr"></div>
+          <div>
+            <div class="text-muted small">Sub-portfolio Size K</div>
+            <div class="h3 text-white mb-0">{{ combo_res.chosen_K }}</div>
+          </div>
+          <div class="vr"></div>
+          <div>
+            <div class="text-muted small">Total Combinations C(N, K)</div>
+            <div class="h3 text-success mb-0">{{ combo_res.total_combinations_C_N_K }}</div>
+          </div>
+        </div>
+
+        <h6 class="text-success font-weight-bold mb-3">Top 5 Optimal Sub-Portfolios (Ranked by Sharpe Efficiency)</h6>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle">
+            <thead>
+              <tr class="table-active">
+                <th>Rank</th>
+                <th>Stock Combination Subset</th>
+                <th>Expected Daily Return</th>
+                <th>Risk (Volatility StdDev)</th>
+                <th>Sharpe Efficiency Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in combo_res.top_portfolios %}
+              <tr>
+                <td><span class="badge bg-success">#{{ loop.index }}</span></td>
+                <td>
+                  {% for s in p.combination %}
+                  <span class="badge bg-primary me-1 fs-6">{{ s }}</span>
+                  {% endfor %}
+                </td>
+                <td class="text-success fw-bold">+{{ p.expected_return_pct }}%</td>
+                <td class="text-warning">{{ p.risk_volatility_pct }}%</td>
+                <td><span class="badge bg-info text-dark fs-6">{{ p.sharpe_score }}</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 4. SET THEORY & RELATIONS ════════════════════════════════════════ -->
+  <div class="tab-pane fade" id="tab-sets" role="tabpanel">
+    <div class="row g-4">
+      <!-- Jaccard Similarity -->
+      <div class="col-md-6">
+        <div class="card glass-card h-100">
+          <div class="card-header bg-transparent border-0">
+            <h5 class="card-title text-info mb-0">
+              <i class="bi bi-intersect me-2"></i>Jaccard Movement Set Similarity J(A, B)
+            </h5>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-3">
+              {{ set_res.jaccard_similarity.explanation }}
+            </p>
+            <div class="list-group list-group-flush">
+              {% for item in set_res.jaccard_similarity.top_similar_pairs %}
+              <div class="list-group-item bg-transparent text-white border-secondary px-0">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <span class="fw-bold text-info me-2">{{ item.pair }}</span>
+                    <span class="small text-muted">|A ∩ B| = {{ item.intersection_size }}, |A ∪ B| = {{ item.union_size }}</span>
+                  </div>
+                  <span class="badge bg-info text-dark fs-6">J = {{ item.jaccard_index }}</span>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Poset Dominance -->
+      <div class="col-md-6">
+        <div class="card glass-card h-100">
+          <div class="card-header bg-transparent border-0">
+            <h5 class="card-title text-warning mb-0">
+              <i class="bi bi-diagram-2 me-2"></i>Poset Partial Order Pareto Dominance
+            </h5>
+          </div>
+          <div class="card-body">
+            <p class="small text-muted mb-3">
+              {{ set_res.poset_dominance.explanation }}
+            </p>
+            <div class="list-group list-group-flush">
+              {% for rel in set_res.poset_dominance.relations %}
+              <div class="list-group-item bg-transparent text-white border-secondary px-0">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-bold text-warning fs-6">{{ rel.relation }}</span>
+                  <span class="badge bg-warning text-dark">Dominant</span>
+                </div>
+                <div class="small text-muted">{{ rel.explanation }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 5. RECURRENCE RELATIONS & DIFFERENCE EQUATIONS ═══════════════════ -->
+  <div class="tab-pane fade" id="tab-recurrence" role="tabpanel">
+    <div class="card glass-card mb-4">
+      <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+        <h5 class="card-title text-primary mb-0">
+          <i class="bi bi-arrow-repeat me-2"></i>Discrete Fibonacci & 2nd-Order Difference Equation
+        </h5>
+        <form method="GET" action="{{ url_for('discrete_math_page') }}#tab-recurrence" class="d-flex align-items-center gap-2">
+          <label class="text-muted small mb-0">Select Stock Ticker:</label>
+          <select name="symbol" class="form-select form-select-sm bg-dark text-white border-secondary select-stock-dropdown" title="Select stock ticker" aria-label="Select stock ticker" onchange="this.form.submit()">
+            {% for s in stocks %}
+            <option value="{{ s }}" {% if selected_sym == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      <div class="card-body">
+        <div class="row g-4">
+
+          <!-- Fibonacci Recurrence -->
+          <div class="col-md-6">
+            <div class="p-3 bg-dark rounded border border-primary h-100">
+              <h6 class="text-primary font-weight-bold mb-2">
+                <i class="bi bi-hash me-1"></i>Discrete Fibonacci Sequence Recurrence
+              </h6>
+              <p class="small text-muted mb-3">{{ recur_res.fibonacci_recurrence.explanation }}</p>
+              <div class="d-flex justify-content-between text-muted small mb-2">
+                <span>20-Day Swing High: <strong>₹{{ recur_res.swing_high_20d }}</strong></span>
+                <span>20-Day Swing Low: <strong>₹{{ recur_res.swing_low_20d }}</strong></span>
+              </div>
+              <ul class="list-group list-group-flush">{% for name, val in recur_res.fibonacci_recurrence.levels.items() %}
+                <li class="list-group-item bg-transparent text-white border-secondary d-flex justify-content-between px-0 py-1">
+                  <span>{{ name.replace('_', ' ') }}</span>
+                  <span class="fw-bold text-info">₹{{ val }}</span>
+                </li>
+                {% endfor %}</ul>
+            </div>
+          </div>
+
+          <!-- Difference Equation -->
+          <div class="col-md-6">
+            <div class="p-3 bg-dark rounded border border-info h-100">
+              <h6 class="text-info font-weight-bold mb-2">
+                <i class="bi bi-graph-up me-1"></i>2nd-Order Linear Difference Forecast
+              </h6>
+              <p class="small text-muted mb-3">{{ recur_res.difference_equation.explanation }}</p>
+              <div class="p-3 rounded bg-secondary-subtle border border-info mb-3 text-center">
+                <div class="text-muted small">Discrete Difference Equation Model</div>
+                <div class="h5 font-monospace text-info my-1">{{ recur_res.difference_equation.formula }}</div>
+              </div>
+              <div class="d-flex justify-content-around text-center mt-4">
+                <div>
+                  <div class="text-muted small">Current Price</div>
+                  <div class="h4 text-white">₹{{ recur_res.current_price }}</div>
+                </div>
+                <div class="vr"></div>
+                <div>
+                  <div class="text-muted small">Predicted Δy_{t+1}</div>
+                  <div class="h4 text-{% if recur_res.difference_equation.predicted_delta >= 0 %}success{% else %}danger{% endif %}">
+                    {% if recur_res.difference_equation.predicted_delta >= 0 %}+{% endif %}{{ recur_res.difference_equation.predicted_delta }}
+                  </div>
+                </div>
+                <div class="vr"></div>
+                <div>
+                  <div class="text-muted small">Forecast Target</div>
+                  <div class="h4 text-info">₹{{ recur_res.difference_equation.forecasted_support_resistance }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Keep active tab on page reload -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var hash = window.location.hash;
+  if (hash) {
+    var triggerEl = document.querySelector('#dmTabs button[data-bs-target="' + hash + '"]');
+    if (triggerEl) {
+      var tab = new bootstrap.Tab(triggerEl);
+      tab.show();
+    }
+  }
+});
+</script>
+{% endblock %}

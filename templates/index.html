@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard — StockGraph Predictor{% endblock %}
+
+{% block content %}
+<!-- Header Section -->
+<div class="row align-items-center mb-4">
+  <div class="col-md-8">
+    <div class="page-header py-2">
+      <h1 class="gradient-text">Market Overview &amp; Prediction Hub</h1>
+      <p class="mb-0">Graph-based stock relationship modeling and probability analytics for Indian markets.</p>
+    </div>
+  </div>
+  <div class="col-md-4 text-md-end mt-3 mt-md-0">
+    <a href="{{ url_for('predict_page') }}" class="btn btn-glow">
+      <i class="bi bi-lightning-charge-fill me-1"></i> Quick Predict
+    </a>
+  </div>
+</div>
+
+{% if not data_available %}
+<!-- Alert if database empty -->
+<div class="alert alert-glass info mb-4">
+  <i class="bi bi-info-circle-fill fs-5"></i>
+  <div>
+    <strong>No stock data loaded yet!</strong> Head over to the <a href="{{ url_for('admin_page') }}" class="text-info fw-bold">Admin Panel</a> to initialize historical market data, or click <strong>Full Pipeline</strong>.
+  </div>
+</div>
+{% endif %}
+
+<!-- Market Summary Cards Grid -->
+<div class="section-title">
+  <span class="dot"></span> Real-Time Stock Cards
+</div>
+<div class="row g-3 mb-5">
+  {% for item in market_data %}
+  <div class="col-xl-3 col-lg-4 col-md-6">
+    <div class="stock-card {% if item.change >= 0 %}up{% else %}down{% endif %}">
+      <div class="d-flex justify-content-between align-items-start mb-2">
+        <div>
+          <div class="stock-symbol">{{ item.symbol }}</div>
+          <div class="stock-name text-truncate stock-name-truncate">{{ item.name }}</div>
+        </div>
+        <span class="stock-sector-badge" style="--badge-color: {{ item.color }};">
+          {{ item.sector }}
+        </span>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-baseline mt-3">
+        <div class="stock-price">₹{{ item.price }}</div>
+        <div class="stock-change {% if item.change >= 0 %}text-up{% else %}text-down{% endif %}">
+          {% if item.change >= 0 %}<i class="bi bi-caret-up-fill"></i>+{% else %}<i class="bi bi-caret-down-fill"></i>{% endif %}{{ item.change }} ({{ item.change_pct }}%)
+        </div>
+      </div>
+
+      <!-- Sparkline Trend Chart -->
+      <div class="my-3" style="height: 48px; position: relative;">
+        <div id="sparkline-{{ item.symbol }}" style="height: 48px; width: 100%;"></div>
+      </div>
+
+      <div class="d-flex justify-content-between fs-7 mt-2 pt-2 text-muted border-top border-secondary border-opacity-25 card-stat-meta">
+        <span>High: ₹{{ item.high }}</span>
+        <span>Low: ₹{{ item.low }}</span>
+      </div>
+
+      <div class="mt-3">
+        <a href="{{ url_for('predict_page', ticker=item.symbol) }}" class="btn btn-glass w-100 py-1 btn-sm">
+          Predict {{ item.symbol }} <i class="bi bi-arrow-right ms-1"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 text-center py-4 text-muted">
+    No active stock quotes. Visit the <a href="{{ url_for('admin_page') }}">Admin Panel</a> to fetch data.
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Chart & Graph Overview Split -->
+<div class="row g-4 mb-5">
+  <div class="col-lg-8">
+    <div class="glass-card h-100">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-graph-up text-info me-2"></i> Stock Price History</div>
+        <div class="d-flex gap-2">
+          <select id="home-chart-stock" class="form-select form-select-sm form-select-dark select-stock-dropdown" title="Select stock ticker" aria-label="Select stock ticker">
+            {% for s in stocks %}
+            <option value="{{ s }}">{{ s }} - {{ stocks[s].name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="card-body-styled">
+        <div id="home-stock-chart" class="chart-container-home"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="glass-card h-100">
+      <div class="card-header-styled">
+        <div class="fw-bold"><i class="bi bi-cpu text-purple me-2"></i> System Architecture</div>
+      </div>
+      <div class="card-body-styled">
+        <div class="timeline-steps">
+          <div class="d-flex gap-3 mb-3">
+            <div class="bg-primary bg-opacity-25 p-2 rounded text-info flex-shrink-0 step-icon-box">
+              <i class="bi bi-database"></i>
+            </div>
+            <div>
+              <div class="fw-bold fs-7">1. Data Collection</div>
+              <div class="text-muted fs-8">Historical OHLCV from Yahoo Finance API</div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-3 mb-3">
+            <div class="bg-purple bg-opacity-25 p-2 rounded text-purple flex-shrink-0 step-icon-box">
+              <i class="bi bi-diagram-3"></i>
+            </div>
+            <div>
+              <div class="fw-bold fs-7">2. Graph Construction</div>
+              <div class="text-muted fs-8">Pearson correlation matrix &amp; NetworkX graph</div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-3 mb-3">
+            <div class="bg-warning bg-opacity-25 p-2 rounded text-warning flex-shrink-0 step-icon-box">
+              <i class="bi bi-percent"></i>
+            </div>
+            <div>
+              <div class="fw-bold fs-7">3. Bayesian Engine</div>
+              <div class="text-muted fs-8">P(Up) / P(Down) with news updating</div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-3">
+            <div class="bg-success bg-opacity-25 p-2 rounded text-success flex-shrink-0 step-icon-box">
+              <i class="bi bi-robot"></i>
+            </div>
+            <div>
+              <div class="fw-bold fs-7">4. ML Ensemble</div>
+              <div class="text-muted fs-8">Random Forest &amp; XGBoost next-day target</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-top border-secondary border-opacity-25">
+          <a href="{{ url_for('predict_page') }}" class="btn btn-glow w-100">Run Live Prediction</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Predictions Table -->
+<div class="glass-card">
+  <div class="card-header-styled">
+    <div class="fw-bold"><i class="bi bi-clock-history me-2 text-warning"></i> Recent System Predictions</div>
+    <a href="{{ url_for('history_page') }}" class="btn btn-glass btn-sm">View All History</a>
+  </div>
+  <div class="card-body-styled p-0">
+    <div class="table-responsive">
+      <table class="styled-table mb-0">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Company</th>
+            <th>Current Price</th>
+            <th>Predicted Price</th>
+            <th>Direction</th>
+            <th>Probability</th>
+            <th>Model</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in recent_preds %}
+          <tr>
+            <td class="text-muted fs-8">{{ p.created_at }}</td>
+            <td class="fw-bold text-info">{{ p.company }}</td>
+            <td class="mono">₹{{ "%.2f"|format(p.current_price or 0) }}</td>
+            <td class="mono fw-bold">₹{{ "%.2f"|format(p.predicted_price or 0) }}</td>
+            <td>
+              {% if p.prediction == 'UP' %}
+                <span class="badge-up"><i class="bi bi-arrow-up-right me-1"></i>UP</span>
+              {% else %}
+                <span class="badge-down"><i class="bi bi-arrow-down-right me-1"></i>DOWN</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ "%.1f"|format((p.probability or 0) * 100) }}%</td>
+            <td class="text-muted fs-8">{{ p.algorithm_used }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="text-center py-3 text-muted">No predictions generated yet. Try predicting a stock!</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const select = document.getElementById('home-chart-stock');
+    if (select) {
+      loadStockChart(select.value, 'home-stock-chart');
+      select.addEventListener('change', (e) => {
+        loadStockChart(e.target.value, 'home-stock-chart');
+      });
+    }
+
+    // Load sparklines for all stock cards
+    {% for item in market_data %}
+    loadSparkline("{{ item.symbol }}", "sparkline-{{ item.symbol }}");
+    {% endfor %}
+  });
+</script>
+{% endblock %}

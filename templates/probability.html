@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block title %}Probability Analysis — StockGraph{% endblock %}
+
+{% block content %}
+<div class="page-header py-2 mb-4">
+  <h1 class="gradient-text"><i class="bi bi-percent me-2"></i> Probability Analysis &amp; Bayesian Inference</h1>
+  <p>Frequentist historical win-rate calculation updated with Bayesian evidence models for stock price movements.</p>
+</div>
+
+<!-- Event Simulation Filter Card -->
+<div class="glass-card mb-4">
+  <div class="card-header-styled">
+    <div class="fw-bold"><i class="bi bi-sliders me-2 text-info"></i> Bayesian Event Likelihood Simulator</div>
+  </div>
+  <div class="card-body-styled">
+    <form action="{{ url_for('probability_page') }}" method="GET" class="row g-3 align-items-center">
+      <div class="col-md-6">
+        <label class="form-label text-muted fs-8 fw-semibold text-uppercase">Market Sentiment Event</label>
+        <select name="event" class="form-select form-select-dark">
+          <option value="" {% if not selected_event %}selected{% endif %}>Neutral Market (Historical Baseline)</option>
+          <option value="positive" {% if selected_event == 'positive' %}selected{% endif %}>Positive Sector News / Bullish Trigger</option>
+          <option value="negative" {% if selected_event == 'negative' %}selected{% endif %}>Negative Sector News / Bearish Trigger</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label text-muted fs-8 fw-semibold text-uppercase">Target Stock Filter</label>
+        <select name="symbol" class="form-select form-select-dark">
+          <option value="">All Universe Stocks</option>
+          {% for key, info in stocks.items() %}
+          <option value="{{ key }}">{{ key }} - {{ info.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 mt-md-4">
+        <button type="submit" class="btn btn-glow w-100 py-2">
+          <i class="bi bi-arrow-repeat me-1"></i> Update
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Probability Grid -->
+<div class="row g-4">
+  {% for symbol, item in prob_data.items() %}
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <div class="card-header-styled">
+        <div>
+          <div class="fw-bold fs-6 text-info">{{ symbol }} — {{ item.name }}</div>
+          <div class="text-muted fs-8">Rolling Window: {{ item.window }} Days</div>
+        </div>
+        <span class="badge-signal {% if 'BUY' in item.signal %}badge-up{% elif 'SELL' in item.signal %}badge-down{% else %}badge-hold{% endif %}">
+          {{ item.signal }}
+        </span>
+      </div>
+
+      <div class="card-body-styled">
+        <!-- Probability Bar -->
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="fs-8 fw-bold text-muted">P(UP) vs P(DOWN)</span>
+            <span class="mono fw-bold text-up">{{ item.p_up_pct }}% UP</span>
+          </div>
+
+          <div class="prob-bar-track" style="height:14px;">
+            <div class="prob-bar-fill {% if item.p_up_pct >= 50 %}up{% else %}down{% endif %}"
+                 style="width: {{ item.p_up_pct }}%;"></div>
+          </div>
+        </div>
+
+        {% if item.p_up_prior is defined %}
+        <div class="p-2 mb-3 bg-card rounded border border-secondary border-opacity-25 fs-8">
+          <div class="d-flex justify-content-between">
+            <span class="text-muted">Prior P(UP): <strong class="text-light">{{ (item.p_up_prior * 100)|round(1) }}%</strong></span>
+            <span class="text-muted">Posterior P(UP): <strong class="text-cyan">{{ item.p_up_pct }}%</strong></span>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Detailed Metrics -->
+        <div class="row g-2 text-center fs-8 mt-2">
+          <div class="col-3">
+            <div class="stat-item p-2">
+              <span class="stat-value fs-6 text-up">{{ item.days_up }}</span>
+              <span class="stat-label">Days Up</span>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="stat-item p-2">
+              <span class="stat-value fs-6 text-down">{{ item.days_down }}</span>
+              <span class="stat-label">Days Down</span>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="stat-item p-2">
+              <span class="stat-value fs-6 text-cyan">{{ item.trend.trend_5d }}%</span>
+              <span class="stat-label">5D Trend</span>
+            </div>
+          </div>
+          <div class="col-3">
+            <div class="stat-item p-2">
+              <span class="stat-value fs-6 text-warning">{{ item.trend.volatility }}%</span>
+              <span class="stat-label">Volatility</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 pt-2 text-end">
+          <a href="{{ url_for('predict_page', ticker=symbol) }}" class="btn btn-glass btn-sm">
+            Run ML Forecast <i class="bi bi-chevron-right"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
