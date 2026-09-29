@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="StockGraph — AI-powered NSE stock market prediction using Graph Theory, Probability Analysis and Machine Learning." />
+  <title>StockGraph — AI Stock Market Prediction</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" />
+
+  <style>
+    /* ── Variables ─────────────────────────────────────────────── */
+    :root {
+      --bg:           #05080f;
+      --bg2:          #0b1120;
+      --cyan:         #00d4ff;
+      --blue:         #3b82f6;
+      --purple:       #9d4edd;
+      --green:        #10b981;
+      --red:          #ef4444;
+      --orange:       #f97316;
+      --text:         #f0f6ff;
+      --muted:        #94a3b8;
+      --border:       rgba(255,255,255,0.08);
+      --glass:        rgba(255,255,255,0.04);
+      --glow-cyan:    0 0 40px rgba(0,212,255,0.18);
+      --glow-purple:  0 0 40px rgba(157,78,221,0.18);
+      --r:            all 0.28s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* ── Reset ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+    a { text-decoration: none; color: inherit; }
+
+    /* ── Animated Background ───────────────────────────────────── */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridShift 20s linear infinite;
+    }
+    @keyframes gridShift { to { background-position: 60px 60px; } }
+
+    .blob {
+      position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0;
+    }
+    .blob-1 {
+      width: 600px; height: 600px; top: -150px; left: -150px;
+      background: radial-gradient(circle, rgba(0,212,255,0.12), transparent 70%);
+      animation: blobFloat 12s ease-in-out infinite;
+    }
+    .blob-2 {
+      width: 500px; height: 500px; bottom: -100px; right: -100px;
+      background: radial-gradient(circle, rgba(157,78,221,0.14), transparent 70%);
+      animation: blobFloat 15s ease-in-out infinite reverse;
+    }
+    .blob-3 {
+      width: 400px; height: 400px; top: 40%; left: 50%; transform: translateX(-50%);
+      background: radial-gradient(circle, rgba(59,130,246,0.08), transparent 70%);
+      animation: blobFloat 10s ease-in-out infinite 3s;
+    }
+    @keyframes blobFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33%       { transform: translate(30px, -40px) scale(1.05); }
+      66%       { transform: translate(-20px, 20px) scale(0.95); }
+    }
+
+    /* ── Particles Canvas ───────────────────────────────────────── */
+    #particles { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+    /* ── Layout ─────────────────────────────────────────────────── */
+    .wrap { position: relative; z-index: 1; }
+
+    /* ── Navbar ─────────────────────────────────────────────────── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 1rem 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(5,8,15,0.7);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      transition: var(--r);
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.35rem; font-weight: 700;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .nav-brand .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      border-radius: 10px; display: grid; place-items: center;
+      box-shadow: 0 0 16px rgba(0,212,255,0.4);
+    }
+    .nav-links { display: flex; gap: 0.25rem; align-items: center; }
+    .nav-links a {
+      padding: 0.45rem 1rem; border-radius: 8px;
+      color: var(--muted); font-size: 0.88rem; font-weight: 500;
+      transition: var(--r);
+    }
+    .nav-links a:hover { color: var(--text); background: var(--glass); }
+    .nav-cta {
+      padding: 0.5rem 1.25rem !important; border-radius: 10px !important;
+      background: linear-gradient(135deg, var(--cyan), var(--blue)) !important;
+      color: #fff !important; font-weight: 600 !important;
+      box-shadow: 0 0 20px rgba(0,212,255,0.3);
+      transition: var(--r) !important;
+    }
+    .nav-cta:hover { transform: translateY(-1px); box-shadow: 0 0 30px rgba(0,212,255,0.5) !important; }
+
+    /* ── Hero ───────────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 7rem 2rem 4rem;
+      text-align: center; flex-direction: column;
+    }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(0,212,255,0.08); border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 100px; padding: 0.4rem 1.1rem;
+      font-size: 0.8rem; font-weight: 600; color: var(--cyan);
+      letter-spacing: 0.05em; text-transform: uppercase;
+      margin-bottom: 2rem;
+      animation: fadeUp 0.8s ease both;
+    }
+    .hero-badge .dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+      box-shadow: 0 0 8px var(--green); animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.6; transform:scale(1.3); } }
+
+    .hero h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(2.8rem, 7vw, 5.5rem);
+      font-weight: 800; line-height: 1.08; letter-spacing: -0.02em;
+      margin-bottom: 1.5rem;
+      animation: fadeUp 0.9s ease 0.1s both;
+    }
+    .hero h1 .grad {
+      background: linear-gradient(135deg, var(--cyan) 0%, var(--blue) 50%, var(--purple) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-size: 200%; animation: gradShift 4s ease infinite;
+    }
+    @keyframes gradShift { 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
+
+    .hero p {
+      max-width: 640px; font-size: 1.15rem; color: var(--muted); line-height: 1.75;
+      margin-bottom: 2.5rem;
+      animation: fadeUp 0.9s ease 0.2s both;
+    }
+
+    .hero-btns {
+      display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center;
+      animation: fadeUp 0.9s ease 0.3s both;
+    }
+    .btn-primary-hero {
+      padding: 0.85rem 2rem; border-radius: 12px; font-weight: 700; font-size: 1rem;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      color: #fff; border: none; cursor: pointer;
+      box-shadow: 0 0 30px rgba(0,212,255,0.35);
+      transition: var(--r); display: flex; align-items: center; gap: 8px;
+    }
+    .btn-primary-hero:hover { transform: translateY(-3px); box-shadow: 0 0 50px rgba(0,212,255,0.55); }
+
+    .btn-secondary-hero {
+      padding: 0.85rem 2rem; border-radius: 12px; font-weight: 600; font-size: 1rem;
+      background: var(--glass); color: var(--text);
+      border: 1px solid var(--border); cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: var(--r); display: flex; align-items: center; gap: 8px;
+    }
+    .btn-secondary-hero:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16); transform: translateY(-3px); }
+
+    /* ── Stats Row ──────────────────────────────────────────────── */
+    .stats-row {
+      display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap;
+      margin-top: 4rem; padding: 2rem 2rem 0;
+      animation: fadeUp 1s ease 0.5s both;
+    }
+    .stat-item { text-align: center; }
+    .stat-num {
+      font-family: 'Space Grotesk', sans-serif; font-size: 2.2rem; font-weight: 800;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .stat-label { font-size: 0.82rem; color: var(--muted); font-weight: 500; letter-spacing: 0.04em; margin-top: 2px; }
+
+    /* ── Scroll Indicator ───────────────────────────────────────── */
+    .scroll-indicator {
+      margin-top: 3.5rem; display: flex; flex-direction: column; align-items: center; gap: 8px;
+      color: var(--muted); font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase;
+      animation: fadeIn 1.5s ease 1s both;
+    }
+    .scroll-indicator .mouse {
+      width: 24px; height: 36px; border: 2px solid rgba(255,255,255,0.2); border-radius: 12px;
+      display: flex; justify-content: center; padding-top: 6px;
+    }
+    .scroll-indicator .wheel {
+      width: 3px; height: 8px; background: var(--cyan); border-radius: 2px;
+      animation: scrollWheel 1.8s ease infinite;
+    }
+    @keyframes scrollWheel { 0%,100%{ transform:translateY(0); opacity:1; } 60%{ transform:translateY(10px); opacity:0; } }
+
+    /* ── Section Wrapper ────────────────────────────────────────── */
+    section { padding: 6rem 2rem; }
+    .section-label {
+      display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--cyan);
+      background: rgba(0,212,255,0.08); border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 100px; padding: 0.3rem 1rem; margin-bottom: 1rem;
+    }
+    .section-title {
+      font-family: 'Space Grotesk', sans-serif; font-size: clamp(1.9rem, 4vw, 3rem);
+      font-weight: 700; line-height: 1.2; margin-bottom: 1rem; letter-spacing: -0.02em;
+    }
+    .section-sub { color: var(--muted); font-size: 1.05rem; max-width: 560px; }
+    .text-center { text-align: center; }
+    .text-center .section-sub { margin: 0 auto; }
+
+    /* ── Feature Cards ──────────────────────────────────────────── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem; max-width: 1200px; margin: 4rem auto 0;
+    }
+    .feat-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 20px;
+      padding: 2rem; position: relative; overflow: hidden;
+      transition: var(--r); cursor: default;
+    }
+    .feat-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, transparent 60%, rgba(255,255,255,0.02));
+      transition: var(--r);
+    }
+    .feat-card:hover { transform: translateY(-6px); border-color: rgba(255,255,255,0.14); box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+    .feat-card:hover::before { background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.04)); }
+
+    .feat-icon {
+      width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
+      font-size: 1.5rem; margin-bottom: 1.25rem;
+    }
+    .feat-icon.cyan   { background: rgba(0,212,255,0.12); color: var(--cyan); box-shadow: 0 0 20px rgba(0,212,255,0.15); }
+    .feat-icon.blue   { background: rgba(59,130,246,0.12); color: var(--blue); box-shadow: 0 0 20px rgba(59,130,246,0.15); }
+    .feat-icon.purple { background: rgba(157,78,221,0.12); color: var(--purple); box-shadow: 0 0 20px rgba(157,78,221,0.15); }
+    .feat-icon.green  { background: rgba(16,185,129,0.12); color: var(--green); box-shadow: 0 0 20px rgba(16,185,129,0.15); }
+    .feat-icon.orange { background: rgba(249,115,22,0.12); color: var(--orange); box-shadow: 0 0 20px rgba(249,115,22,0.15); }
+    .feat-icon.red    { background: rgba(239,68,68,0.12); color: var(--red); box-shadow: 0 0 20px rgba(239,68,68,0.15); }
+
+    .feat-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.6rem; }
+    .feat-desc { color: var(--muted); font-size: 0.9rem; line-height: 1.65; }
+    .feat-tag {
+      display: inline-block; margin-top: 1rem; font-size: 0.72rem; font-weight: 600;
+      padding: 0.25rem 0.75rem; border-radius: 100px; letter-spacing: 0.05em;
+    }
+    .tag-cyan   { background: rgba(0,212,255,0.1); color: var(--cyan); }
+    .tag-blue   { background: rgba(59,130,246,0.1); color: var(--blue); }
+    .tag-purple { background: rgba(157,78,221,0.1); color: var(--purple); }
+    .tag-green  { background: rgba(16,185,129,0.1); color: var(--green); }
+    .tag-orange { background: rgba(249,115,22,0.1); color: var(--orange); }
+    .tag-red    { background: rgba(239,68,68,0.1); color: var(--red); }
+
+    /* ── Stock Ticker ────────────────────────────────────────────── */
+    .ticker-section { padding: 0; overflow: hidden; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .ticker-track {
+      display: flex; gap: 0; width: max-content;
+      animation: tickerScroll 30s linear infinite;
+      background: rgba(0,212,255,0.03);
+    }
+    @keyframes tickerScroll { to { transform: translateX(-50%); } }
+    .ticker-item {
+      display: flex; align-items: center; gap: 10px; padding: 1rem 2.5rem;
+      border-right: 1px solid var(--border); white-space: nowrap;
+      font-size: 0.85rem;
+    }
+    .ticker-sym { font-weight: 700; color: var(--text); }
+    .ticker-name { color: var(--muted); }
+    .ticker-up   { color: var(--green); font-weight: 600; }
+    .ticker-down { color: var(--red);   font-weight: 600; }
+
+    /* ── How It Works ───────────────────────────────────────────── */
+    .steps-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 2rem; max-width: 1100px; margin: 4rem auto 0;
+      position: relative;
+    }
+    .step-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 16px;
+      padding: 2rem 1.5rem; text-align: center; transition: var(--r);
+    }
+    .step-card:hover { transform: translateY(-5px); border-color: rgba(0,212,255,0.2); box-shadow: var(--glow-cyan); }
+    .step-num {
+      width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+      font-family: 'Space Grotesk', sans-serif; font-size: 1.2rem; font-weight: 800;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      color: #fff; margin: 0 auto 1.25rem;
+      box-shadow: 0 0 20px rgba(0,212,255,0.3);
+    }
+    .step-title { font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
+    .step-desc  { color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
+
+    /* ── Tech Stack ─────────────────────────────────────────────── */
+    .tech-wrap {
+      max-width: 1000px; margin: 3rem auto 0;
+      display: flex; flex-wrap: wrap; gap: 0.9rem; justify-content: center;
+    }
+    .tech-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--glass); border: 1px solid var(--border); border-radius: 100px;
+      padding: 0.5rem 1.2rem; font-size: 0.85rem; font-weight: 600;
+      transition: var(--r); cursor: default;
+    }
+    .tech-pill:hover { background: rgba(255,255,255,0.07); transform: translateY(-2px); }
+    .tech-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    /* ── NSE Stocks Table ───────────────────────────────────────── */
+    .stocks-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem; max-width: 1100px; margin: 3rem auto 0;
+    }
+    .stock-card {
+      background: var(--glass); border: 1px solid var(--border); border-radius: 14px;
+      padding: 1.25rem 1.5rem; display: flex; align-items: center; gap: 1rem;
+      transition: var(--r);
+    }
+    .stock-card:hover { transform: translateY(-4px); border-color: rgba(255,255,255,0.14); box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
+    .stock-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .stock-sym { font-weight: 700; font-size: 0.95rem; }
+    .stock-name { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .stock-sector { font-size: 0.72rem; color: var(--muted); margin-top: 1px; }
+
+    /* ── CTA Banner ─────────────────────────────────────────────── */
+    .cta-banner {
+      max-width: 900px; margin: 0 auto;
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: 28px; padding: 4rem 3rem;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .cta-banner::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(0,212,255,0.05), rgba(157,78,221,0.05));
+    }
+    .cta-banner .glow-border {
+      position: absolute; inset: 0; border-radius: 28px;
+      background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(157,78,221,0.2));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: destination-out;
+      padding: 1px;
+    }
+    .cta-banner h2 {
+      font-family: 'Space Grotesk', sans-serif; font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 800; margin-bottom: 1rem; position: relative;
+    }
+    .cta-banner p { color: var(--muted); margin-bottom: 2rem; font-size: 1.05rem; position: relative; }
+    .cta-banner .btn-wrap { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; position: relative; }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+    }
+    .footer-brand {
+      font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+      background: linear-gradient(135deg, var(--cyan), var(--blue));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .footer-note { color: var(--muted); font-size: 0.82rem; }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { color: var(--muted); font-size: 0.85rem; transition: var(--r); }
+    .footer-links a:hover { color: var(--cyan); }
+
+    /* ── Animations ─────────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .reveal {
+      opacity: 0; transform: translateY(30px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    /* ── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      nav { padding: 0.85rem 1.25rem; }
+      .nav-links { display: none; }
+      .hero { padding: 6rem 1.25rem 3rem; }
+      .stats-row { gap: 1.5rem; }
+      section { padding: 4rem 1.25rem; }
+      footer { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Background Effects ──────────────────────────────────────────────── -->
+<div class="bg-grid"></div>
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+<canvas id="particles"></canvas>
+
+<!-- ── Navbar ─────────────────────────────────────────────────────────── -->
+<nav>
+  <a href="#" class="nav-brand">
+    <div class="logo-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+        <polyline points="16 7 22 7 22 13"></polyline>
+      </svg>
+    </div>
+    StockGraph
+  </a>
+
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#stocks">Stocks</a>
+    <a href="#tech">Tech Stack</a>
+    <a href="{{ url_for('index') }}" class="nav-cta">Launch App →</a>
+  </div>
+</nav>
+
+<!-- ── Wrap ───────────────────────────────────────────────────────────── -->
+<div class="wrap">
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      Live NSE Market Analysis
+    </div>
+
+    <h1>
+      Predict Markets with<br />
+      <span class="grad">AI & Graph Theory</span>
+    </h1>
+
+    <p>
+      An intelligent stock prediction engine combining <strong>Graph Theory</strong>, 
+      <strong>Probability Analysis</strong>, <strong>Machine Learning</strong>, and 
+      <strong>Discrete Mathematics</strong> to analyse Indian NSE stocks in real time.
+    </p>
+
+    <div class="hero-btns">
+      <a href="{{ url_for('index') }}" class="btn-primary-hero" id="hero-launch-btn">
+        <i class="bi bi-rocket-takeoff"></i> Launch Dashboard
+      </a>
+      <a href="{{ url_for('predict_page') }}" class="btn-secondary-hero" id="hero-predict-btn">
+        <i class="bi bi-lightning-charge"></i> Try Prediction
+      </a>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-item">
+        <div class="stat-num" id="cnt-stocks">8</div>
+        <div class="stat-label">NSE Stocks</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">2yr</div>
+        <div class="stat-label">Historical Data</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">5+</div>
+        <div class="stat-label">Graph Algorithms</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">XGB</div>
+        <div class="stat-label">ML Engine</div>
+      </div>
+    </div>
+
+    <!-- Scroll indicator -->
+    <div class="scroll-indicator">
+      <div class="mouse"><div class="wheel"></div></div>
+      Scroll to explore
+    </div>
+  </section>
+
+  <!-- ── Ticker Strip ───────────────────────────────────────────────────── -->
+  <div class="ticker-section">
+    <div class="ticker-track" id="ticker-track">
+      <!-- duplicated for seamless loop -->
+      <div class="ticker-item"><span class="ticker-sym">RELIANCE</span><span class="ticker-name">Reliance Industries</span><span class="ticker-up">▲ +1.4%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">TCS</span><span class="ticker-name">Tata Consultancy</span><span class="ticker-down">▼ -0.3%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">INFY</span><span class="ticker-name">Infosys</span><span class="ticker-up">▲ +0.8%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">HDFCBANK</span><span class="ticker-name">HDFC Bank</span><span class="ticker-up">▲ +2.1%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">ICICIBANK</span><span class="ticker-name">ICICI Bank</span><span class="ticker-down">▼ -0.6%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">WIPRO</span><span class="ticker-name">Wipro</span><span class="ticker-up">▲ +0.5%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">HINDUNILVR</span><span class="ticker-name">HUL</span><span class="ticker-down">▼ -0.2%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">TATAMOTORS</span><span class="ticker-name">Tata Motors</span><span class="ticker-up">▲ +1.9%</span></div>
+      <!-- duplicate -->
+      <div class="ticker-item"><span class="ticker-sym">RELIANCE</span><span class="ticker-name">Reliance Industries</span><span class="ticker-up">▲ +1.4%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">TCS</span><span class="ticker-name">Tata Consultancy</span><span class="ticker-down">▼ -0.3%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">INFY</span><span class="ticker-name">Infosys</span><span class="ticker-up">▲ +0.8%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">HDFCBANK</span><span class="ticker-name">HDFC Bank</span><span class="ticker-up">▲ +2.1%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">ICICIBANK</span><span class="ticker-name">ICICI Bank</span><span class="ticker-down">▼ -0.6%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">WIPRO</span><span class="ticker-name">Wipro</span><span class="ticker-up">▲ +0.5%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">HINDUNILVR</span><span class="ticker-name">HUL</span><span class="ticker-down">▼ -0.2%</span></div>
+      <div class="ticker-item"><span class="ticker-sym">TATAMOTORS</span><span class="ticker-name">Tata Motors</span><span class="ticker-up">▲ +1.9%</span></div>
+    </div>
+  </div>
+
+  <!-- ── Features ──────────────────────────────────────────────────────── -->
+  <section id="features">
+    <div class="text-center reveal">
+      <div class="section-label">Features</div>
+      <h2 class="section-title">Everything You Need to<br />Analyse the Market</h2>
+      <p class="section-sub">Six powerful analytical engines working together to give you the clearest market picture.</p>
+    </div>
+
+    <div class="features-grid">
+      <a href="{{ url_for('graph_page') }}" class="feat-card reveal" style="transition-delay:0.05s">
+        <div class="feat-icon cyan"><i class="bi bi-diagram-3"></i></div>
+        <div class="feat-title">Graph Theory Network</div>
+        <div class="feat-desc">Visualise stock correlations as a weighted network. Run BFS, DFS, Dijkstra shortest paths, PageRank importance ranking, and Minimum Spanning Trees.</div>
+        <span class="feat-tag tag-cyan">NetworkX · D3.js</span>
+      </a>
+
+      <a href="{{ url_for('predict_page') }}" class="feat-card reveal" style="transition-delay:0.1s">
+        <div class="feat-icon blue"><i class="bi bi-lightning-charge"></i></div>
+        <div class="feat-title">ML Price Prediction</div>
+        <div class="feat-desc">Per-stock XGBoost + RandomForest models trained on OHLCV data with MA, RSI, and MACD indicators. Returns predicted price, direction & confidence.</div>
+        <span class="feat-tag tag-blue">XGBoost · Scikit-learn</span>
+      </a>
+
+      <a href="{{ url_for('probability_page') }}" class="feat-card reveal" style="transition-delay:0.15s">
+        <div class="feat-icon purple"><i class="bi bi-percent"></i></div>
+        <div class="feat-title">Probability Engine</div>
+        <div class="feat-desc">Statistical probability of price-up / price-down events over a configurable 100-day rolling window with conditional Bayesian inference.</div>
+        <span class="feat-tag tag-purple">Bayesian · Stats</span>
+      </a>
+
+      <a href="{{ url_for('discrete_math_page') }}" class="feat-card reveal" style="transition-delay:0.2s">
+        <div class="feat-icon green"><i class="bi bi-cpu"></i></div>
+        <div class="feat-title">Discrete Mathematics</div>
+        <div class="feat-desc">Boolean logic gates for strategy evaluation, C(n,k) portfolio combinatorics, sector set-theory analysis, and Fibonacci recurrence price modelling.</div>
+        <span class="feat-tag tag-green">Logic · Combinatorics</span>
+      </a>
+
+      <a href="{{ url_for('index') }}" class="feat-card reveal" style="transition-delay:0.25s">
+        <div class="feat-icon orange"><i class="bi bi-bar-chart-line"></i></div>
+        <div class="feat-title">Live Market Dashboard</div>
+        <div class="feat-desc">Real-time market summary with interactive Plotly OHLCV charts, volume analysis, price change heatmaps and recent prediction history.</div>
+        <span class="feat-tag tag-orange">Plotly · Flask</span>
+      </a>
+
+      <a href="{{ url_for('admin_page') }}" class="feat-card reveal" style="transition-delay:0.3s">
+        <div class="feat-icon red"><i class="bi bi-gear-wide-connected"></i></div>
+        <div class="feat-title">Admin Control Panel</div>
+        <div class="feat-desc">Secured admin panel for on-demand data refresh from Yahoo Finance, graph rebuild, model retraining and full-pipeline automation.</div>
+        <span class="feat-tag tag-red">Flask · SQLite</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ── How It Works ───────────────────────────────────────────────────── -->
+  <section id="how-it-works" style="background: rgba(255,255,255,0.015); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="text-center reveal">
+      <div class="section-label">How It Works</div>
+      <h2 class="section-title">From Raw Data to<br />Smart Prediction</h2>
+      <p class="section-sub">A four-step automated pipeline turns Yahoo Finance data into actionable insights.</p>
+    </div>
+
+    <div class="steps-grid">
+      <div class="step-card reveal" style="transition-delay:0.05s">
+        <div class="step-num">1</div>
+        <div class="step-title">Data Collection</div>
+        <div class="step-desc">Fetches 2 years of OHLCV data for 8 NSE stocks via yFinance. Computes MA20, MA50, RSI, MACD and stores in SQLite.</div>
+      </div>
+      <div class="step-card reveal" style="transition-delay:0.1s">
+        <div class="step-num">2</div>
+        <div class="step-title">Graph Construction</div>
+        <div class="step-desc">Calculates Pearson correlations between all stock pairs. Draws edges where correlation &gt; 0.4, then runs graph algorithms.</div>
+      </div>
+      <div class="step-card reveal" style="transition-delay:0.15s">
+        <div class="step-num">3</div>
+        <div class="step-title">Model Training</div>
+        <div class="step-desc">Trains separate XGBoost and RandomForest models per stock using engineered technical indicator features with 80/20 train-test split.</div>
+      </div>
+      <div class="step-card reveal" style="transition-delay:0.2s">
+        <div class="step-num">4</div>
+        <div class="step-title">Prediction & Analysis</div>
+        <div class="step-desc">Loads saved models to predict next-day price and direction. Combines with probability scores and graph centrality for a complete signal.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── NSE Stocks ─────────────────────────────────────────────────────── -->
+  <section id="stocks">
+    <div class="text-center reveal">
+      <div class="section-label">Covered Stocks</div>
+      <h2 class="section-title">8 Top NSE Stocks<br />Across 4 Sectors</h2>
+      <p class="section-sub">Tracking India's most liquid large-cap stocks for maximum signal quality.</p>
+    </div>
+
+    <div class="stocks-grid">
+      <div class="stock-card reveal">
+        <div class="stock-dot" style="background:#FF6B35; box-shadow: 0 0 8px #FF6B35;"></div>
+        <div>
+          <div class="stock-sym">RELIANCE</div>
+          <div class="stock-name">Reliance Industries</div>
+          <div class="stock-sector">Energy</div>
+        </div>
+      </div>
+      <div class="stock-card reveal" style="transition-delay:0.05s">
+        <div class="stock-dot" style="background:#00D4FF; box-shadow: 0 0 8px #00D4FF;"></div>
+        <div>
+          <div class="stock-sym">TCS</div>
+          <div class="stock-name">Tata Consultancy Services</div>
+          <div class="stock-sector">IT</div>
+        </div>
+      </div>
+      <div class="stock-card reveal" style="transition-delay:0.1s">
+        <div class="stock-dot" style="background:#00B4D8; box-shadow: 0 0 8px #00B4D8;"></div>
+        <div>
+          <div class="stock-sym">INFY</div>
+          <div class="stock-name">Infosys</div>
+          <div class="stock-sector">IT</div>
+        </div>
+      </div>
+      <div class="stock-card reveal" style="transition-delay:0.15s">
+        <div class="stock-dot" style="background:#7B2FBE; box-shadow: 0 0 8px #7B2FBE;"></div>
+        <div>
+          <div class="stock-sym">HDFCBANK</div>
+          <div class="stock-name">HDFC Bank</div>
+          <div class="stock-sector">Finance</div>
+        </div>
+      </div>
+      <div class="stock-card reveal" style="transition-delay:0.2s">
+        <div class="stock-dot" style="background:#9D4EDD; box-shadow: 0 0 8px #9D4EDD;"></div>
+        <div>
+          <div class="stock-sym">ICICIBANK</div>
+          <div class="stock-name">ICICI Bank</div>
+          <div class="stock-sector">Finance</div>
+        </div>
+      </div>
+      <div class="stock-card reveal" style="transition-delay:0.25s">
+        <div class="stock-dot" style="background:#4CC9F0; box-shadow: 0 0 8px #4CC9F0;"></div>
+        <div>
+          <div class="stock-sym">WIPRO</div>
+          <div class="stock-name">Wipro</div>
+          <div class="stock-sector">IT</div>
+        </div>
+      </div>
+      <div class="stock-card reveal" style="transition-delay:0.3s">
+        <div class="stock-dot" style="background:#F72585; box-shadow: 0 0 8px #F72585;"></div>
+        <div>
+          <div class="stock-sym">HINDUNILVR</div>
+          <div class="stock-name">Hindustan Unilever</div>
+          <div class="stock-sector">FMCG</div>
+        </div>
+      </div>
+      <div class="stock-card reveal" style="transition-delay:0.35s">
+        <div class="stock-dot" style="background:#4CAF50; box-shadow: 0 0 8px #4CAF50;"></div>
+        <div>
+          <div class="stock-sym">TATAMOTORS</div>
+          <div class="stock-name">Tata Motors</div>
+          <div class="stock-sector">Auto</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tech Stack ─────────────────────────────────────────────────────── -->
+  <section id="tech" style="background: rgba(255,255,255,0.015); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+    <div class="text-center reveal">
+      <div class="section-label">Tech Stack</div>
+      <h2 class="section-title">Built with Best-in-Class<br />Open Source Tools</h2>
+    </div>
+
+    <div class="tech-wrap">
+      <div class="tech-pill reveal"><div class="dot" style="background:#3b82f6;"></div> Flask 3.0</div>
+      <div class="tech-pill reveal" style="transition-delay:0.04s"><div class="dot" style="background:#10b981;"></div> yFinance</div>
+      <div class="tech-pill reveal" style="transition-delay:0.08s"><div class="dot" style="background:#f97316;"></div> XGBoost</div>
+      <div class="tech-pill reveal" style="transition-delay:0.12s"><div class="dot" style="background:#00d4ff;"></div> NetworkX</div>
+      <div class="tech-pill reveal" style="transition-delay:0.16s"><div class="dot" style="background:#9d4edd;"></div> Plotly</div>
+      <div class="tech-pill reveal" style="transition-delay:0.2s"><div class="dot" style="background:#f59e0b;"></div> Pandas</div>
+      <div class="tech-pill reveal" style="transition-delay:0.24s"><div class="dot" style="background:#ef4444;"></div> Scikit-learn</div>
+      <div class="tech-pill reveal" style="transition-delay:0.28s"><div class="dot" style="background:#3b82f6;"></div> NumPy</div>
+      <div class="tech-pill reveal" style="transition-delay:0.32s"><div class="dot" style="background:#10b981;"></div> SQLite</div>
+      <div class="tech-pill reveal" style="transition-delay:0.36s"><div class="dot" style="background:#00d4ff;"></div> D3.js</div>
+      <div class="tech-pill reveal" style="transition-delay:0.4s"><div class="dot" style="background:#9d4edd;"></div> SciPy</div>
+      <div class="tech-pill reveal" style="transition-delay:0.44s"><div class="dot" style="background:#f97316;"></div> Joblib</div>
+      <div class="tech-pill reveal" style="transition-delay:0.48s"><div class="dot" style="background:#f59e0b;"></div> Bootstrap 5</div>
+    </div>
+  </section>
+
+  <!-- ── CTA ───────────────────────────────────────────────────────────── -->
+  <section>
+    <div class="cta-banner reveal">
+      <div class="glow-border"></div>
+      <h2>Ready to Predict the Market?</h2>
+      <p>Launch the dashboard, collect live NSE data, and let the AI do the heavy lifting.</p>
+      <div class="btn-wrap">
+        <a href="{{ url_for('index') }}" class="btn-primary-hero" id="cta-launch-btn">
+          <i class="bi bi-rocket-takeoff"></i> Open Dashboard
+        </a>
+        <a href="{{ url_for('predict_page') }}" class="btn-secondary-hero" id="cta-predict-btn">
+          <i class="bi bi-lightning-charge"></i> Run a Prediction
+        </a>
+      </div>
+    </div>
+  </section>
+
+</div><!-- /wrap -->
+
+<!-- ── Footer ────────────────────────────────────────────────────────── -->
+<footer>
+  <div>
+    <div class="footer-brand">StockGraph</div>
+    <div class="footer-note">Graph Theory + Probability + ML · VIT Pune DM-CP Project</div>
+  </div>
+  <div class="footer-links">
+    <a href="{{ url_for('index') }}">Dashboard</a>
+    <a href="{{ url_for('graph_page') }}">Graph</a>
+    <a href="{{ url_for('predict_page') }}">Predict</a>
+    <a href="{{ url_for('admin_page') }}">Admin</a>
+  </div>
+</footer>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────── -->
+<script>
+  /* ── Particle Canvas ────────────────────────────────────────── */
+  (function () {
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let W, H, pts = [];
+
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    for (let i = 0; i < 80; i++) {
+      pts.push({
+        x: Math.random() * 2000,
+        y: Math.random() * 2000,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.5,
+        a: Math.random()
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      pts.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0,212,255,${p.a * 0.5})`;
+        ctx.fill();
+      });
+
+      // Draw lines between close particles
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[i].x - pts[j].x;
+          const dy = pts[i].y - pts[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            ctx.beginPath();
+            ctx.moveTo(pts[i].x, pts[i].y);
+            ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.strokeStyle = `rgba(0,212,255,${0.06 * (1 - dist / 120)})`;
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+  })();
+
+  /* ── Scroll Reveal ──────────────────────────────────────────── */
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('visible'); }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  /* ── Counter animation ──────────────────────────────────────── */
+  function animateCount(el, target, suffix = '') {
+    let current = 0;
+    const step = target / 60;
+    const timer = setInterval(() => {
+      current = Math.min(current + step, target);
+      el.textContent = Math.round(current) + suffix;
+      if (current >= target) clearInterval(timer);
+    }, 16);
+  }
+
+  const cntStocks = document.getElementById('cnt-stocks');
+  if (cntStocks) setTimeout(() => animateCount(cntStocks, 8), 600);
+
+  /* ── Navbar scroll effect ────────────────────────────────────── */
+  const nav = document.querySelector('nav');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 60) {
+      nav.style.background = 'rgba(5,8,15,0.92)';
+      nav.style.boxShadow  = '0 4px 30px rgba(0,0,0,0.5)';
+    } else {
+      nav.style.background = 'rgba(5,8,15,0.7)';
+      nav.style.boxShadow  = 'none';
+    }
+  });
+</script>
+</body>
+</html>
