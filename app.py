@@ -51,8 +51,15 @@ def inject_globals():
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/')
+@app.route('/landing')
+def landing_page():
+    """Landing page — intro / marketing page for the system."""
+    return render_template('landing.html')
+
+
+@app.route('/dashboard')
 def index():
-    """Home — Market Summary dashboard."""
+    """Dashboard — Market Summary."""
     market_data     = []
     recent_preds    = []
     data_available  = False
@@ -210,7 +217,7 @@ def admin_login():
 def admin_logout():
     """Admin logout route."""
     session.pop('admin_logged_in', None)
-    return redirect(url_for('index'))
+    return redirect(url_for('landing_page'))
 
 
 @app.route('/admin', methods=['GET', 'POST'])
