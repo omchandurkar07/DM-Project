@@ -305,7 +305,8 @@ def save_market_quotes(quotes, source='Yahoo Finance'):
             '''
             params = [
                 (company, quote['date'], quote['price'], quote['change'],
-                 quote['change_pct'], quote['high'], quote['low'], quote['volume'], source)
+                 quote['change_pct'], quote['high'], quote['low'], quote['volume'],
+                 quote.get('source', source))
                 for company, quote in quotes.items()
             ]
             cursor.executemany(query, params)
@@ -321,7 +322,8 @@ def save_market_quotes(quotes, source='Yahoo Finance'):
                     refreshed_at=CURRENT_TIMESTAMP
             ''', [
                 (company, quote['date'], quote['price'], quote['change'],
-                 quote['change_pct'], quote['high'], quote['low'], quote['volume'], source)
+                 quote['change_pct'], quote['high'], quote['low'], quote['volume'],
+                 quote.get('source', source))
                 for company, quote in quotes.items()
             ])
         conn.commit()

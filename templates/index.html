@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Dashboard — StockGraph Predictor{% endblock %}
+{% block title %}Market Analysis — StockPredict AI{% endblock %}
 
 {% block content %}
 <!-- Header Section -->
@@ -32,15 +32,15 @@
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
   <div>
     <div class="section-title mb-1">
-      <span class="dot"></span> Latest Daily Prices
+      <span class="dot"></span> Latest Available Prices
     </div>
     <div id="quote-refresh-status" class="text-muted fs-8" role="status" aria-live="polite">
-      Quote date and source are shown on each card.
+      Refresh during market hours for the latest Yahoo Finance intraday quote; prices may be delayed.
     </div>
   </div>
   <button id="refresh-quotes-btn" class="btn btn-glow" type="button">
     <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
-    <span>Refresh quotes</span>
+    <span>Refresh prices</span>
   </button>
 </div>
 <div class="row g-3 mb-5">
@@ -92,10 +92,14 @@
 <!-- Chart & Graph Overview Split -->
 <div class="row g-4 mb-5">
   <div class="col-lg-8">
-    <div class="glass-card h-100">
+    <div class="glass-card h-100 stock-history-card">
       <div class="card-header-styled">
-        <div class="fw-bold"><i class="bi bi-graph-up text-info me-2"></i> Stock Price History</div>
-        <div class="d-flex gap-2">
+        <div>
+          <div class="fw-bold"><i class="bi bi-graph-up text-info me-2"></i>Stock Price History</div>
+          <div class="stock-chart-subtitle">Closing price and moving averages · recent trading sessions</div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+          <label for="home-chart-stock" class="visually-hidden">Choose a stock for the price chart</label>
           <select id="home-chart-stock" class="form-select form-select-sm form-select-dark select-stock-dropdown" title="Select stock ticker" aria-label="Select stock ticker">
             {% for s in stocks %}
             <option value="{{ s }}">{{ s }} - {{ stocks[s].name }}</option>
@@ -104,6 +108,21 @@
         </div>
       </div>
       <div class="card-body-styled">
+        <div class="stock-chart-summary" aria-live="polite">
+          <div class="stock-chart-metric">
+            <span>Latest close</span>
+            <strong id="home-chart-latest">Loading...</strong>
+          </div>
+          <div class="stock-chart-metric">
+            <span>Period change</span>
+            <strong id="home-chart-change">-</strong>
+          </div>
+          <div class="stock-chart-metric">
+            <span>Period high / low</span>
+            <strong id="home-chart-range">-</strong>
+          </div>
+          <div class="stock-chart-date" id="home-chart-date"></div>
+        </div>
         <div id="home-stock-chart" class="chart-container-home"></div>
       </div>
     </div>
@@ -223,7 +242,7 @@
     if (refreshButton) {
       refreshButton.addEventListener('click', async () => {
         refreshButton.disabled = true;
-        quoteStatus.textContent = 'Fetching latest daily prices from Yahoo Finance…';
+        quoteStatus.textContent = 'Fetching the latest available prices from Yahoo Finance…';
 
         try {
           const response = await fetch("{{ url_for('api_refresh_quotes') }}", { method: 'POST' });
@@ -239,7 +258,8 @@
             if (!card) return;
 
             card.querySelector('[data-quote-price]').textContent = `₹${formatPrice(quote.price)}`;
-            card.querySelector('[data-quote-date]').textContent = `${result.source} · ${quote.date}`;
+            card.querySelector('[data-quote-date]').textContent =
+              `${quote.source || result.source} · ${quote.display_time || quote.date}`;
             card.querySelector('[data-quote-high]').textContent = formatPrice(quote.high);
             card.querySelector('[data-quote-low]').textContent = formatPrice(quote.low);
 
@@ -257,9 +277,20 @@
 
           const updatedCount = Object.keys(result.quotes).length;
           const errorCount = Object.keys(result.errors || {}).length;
+          const intradayCount = Object.values(result.quotes).filter((quote) => quote.is_intraday).length;
           quoteStatus.textContent = errorCount
-            ? `Updated ${updatedCount} quotes; ${errorCount} unavailable. Dates are shown per card.`
-            : `Updated ${updatedCount} quotes from Yahoo Finance. Dates are shown per card.`;
+            ? `Updated ${updatedCount} prices (${intradayCount} intraday); ${errorCount} unavailable. Prices may be delayed.`
+            : `Updated ${updatedCount} prices (${intradayCount} intraday). Yahoo Finance data may be delayed; refresh time is shown on each card.`;
+
+          const selectedChartStock = document.getElementById('home-chart-stock');
+          if (selectedChartStock && result.quotes[selectedChartStock.value]) {
+            loadStockChart(
+              selectedChartStock.value,
+              'home-stock-chart',
+              null,
+              result.quotes[selectedChartStock.value]
+            );
+          }
         } catch (error) {
           quoteStatus.textContent = `Refresh failed: ${error.message}`;
         } finally {

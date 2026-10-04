@@ -1,6 +1,6 @@
 /* static/js/charts.js — Plotly Stock Candlestick and Line Charts */
 
-async function loadStockChart(symbol, containerId, targetPrice = null) {
+async function loadStockChart(symbol, containerId, targetPrice = null, latestQuote = null) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
@@ -17,12 +17,13 @@ async function loadStockChart(symbol, containerId, targetPrice = null) {
   const mainColor = symbolColors[symbol.toUpperCase()] || '#00d4ff';
 
   const hexToRgb = hex => {
-    const bigint = parseInt(hex.replace('#', ''), 16);
+    const bigint = Number.parseInt(hex.replace('#', ''), 16);
     return `${(bigint >> 16) & 255}, ${(bigint >> 8) & 255}, ${bigint & 255}`;
   };
 
   try {
     const res = await fetch(`/api/stock-history/${symbol}?limit=120`);
+    if (!res.ok) throw new Error(`History request failed (${res.status})`);
     const data = await res.json();
 
     if (!data || data.length === 0) {
@@ -34,17 +35,46 @@ async function loadStockChart(symbol, containerId, targetPrice = null) {
     const closes = data.map(d => d.close);
     const ma20   = data.map(d => d.ma20);
     const ma50   = data.map(d => d.ma50);
+    const lastClose = closes[closes.length - 1];
+    const firstClose = closes[0];
+    const livePrice = latestQuote && Number.isFinite(Number(latestQuote.price))
+      ? Number(latestQuote.price) : lastClose;
+    const highest = Math.max(...data.map(d => Number(d.high)).filter(Number.isFinite));
+    const lowest = Math.min(...data.map(d => Number(d.low)).filter(Number.isFinite));
+    const changePct = firstClose ? ((livePrice / firstClose) - 1) * 100 : 0;
 
-    // Main line chart with smooth spline and gradient fill
+    const fmtPrice = value => `₹${Number(value).toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })}`;
+    const summaryLatest = document.getElementById('home-chart-latest');
+    const summaryChange = document.getElementById('home-chart-change');
+    const summaryRange = document.getElementById('home-chart-range');
+    const summaryDate = document.getElementById('home-chart-date');
+    if (summaryLatest) summaryLatest.textContent = fmtPrice(livePrice);
+    if (summaryChange) {
+      summaryChange.textContent = `${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}%`;
+      summaryChange.classList.toggle('is-positive', changePct > 0);
+      summaryChange.classList.toggle('is-negative', changePct < 0);
+    }
+    if (summaryRange) summaryRange.textContent =
+      `${fmtPrice(Math.max(highest, livePrice))} / ${fmtPrice(Math.min(lowest, livePrice))}`;
+    if (summaryDate) summaryDate.textContent =
+      latestQuote && latestQuote.display_time
+        ? `Quote ${latestQuote.display_time}`
+        : `History through ${dates[dates.length - 1]}`;
+
+    // A lightly filled line emphasizes the trend without distorting daily moves.
     const traceClose = {
       x: dates,
       y: closes,
       type: 'scatter',
       mode: 'lines',
       name: `${symbol} Price`,
-      line: { color: mainColor, width: 2.2, shape: 'spline' },
+      line: { color: mainColor, width: 2.8 },
       fill: 'tozeroy',
-      fillcolor: `rgba(${hexToRgb(mainColor)}, 0.08)`,
+      fillcolor: `rgba(${hexToRgb(mainColor)}, 0.07)`,
+      hovertemplate: '<b>%{x|%d %b %Y}</b><br>Close: ₹%{y:,.2f}<extra></extra>',
     };
 
     // Moving Averages Traces
@@ -54,7 +84,8 @@ async function loadStockChart(symbol, containerId, targetPrice = null) {
       type: 'scatter',
       mode: 'lines',
       name: 'MA20',
-      line: { color: '#f59e0b', width: 1.2, dash: 'dot' }
+      line: { color: '#fbbf24', width: 1.8, dash: 'dot' },
+      hovertemplate: 'MA20: ₹%{y:,.2f}<extra></extra>',
     };
 
     const traceMA50 = {
@@ -63,10 +94,50 @@ async function loadStockChart(symbol, containerId, targetPrice = null) {
       type: 'scatter',
       mode: 'lines',
       name: 'MA50',
-      line: { color: '#9d4edd', width: 1.2, dash: 'dash' }
+      line: { color: '#c084fc', width: 1.8, dash: 'dash' },
+      hovertemplate: 'MA50: ₹%{y:,.2f}<extra></extra>',
     };
 
     const traces = [traceClose, traceMA20, traceMA50];
+    traces.push({
+      x: [dates[dates.length - 1]],
+      y: [lastClose],
+      type: 'scatter',
+      mode: 'markers',
+      name: 'Latest close',
+      showlegend: false,
+      marker: {
+        color: mainColor,
+        size: 9,
+        line: { color: '#e0f2fe', width: 2 }
+      },
+      hovertemplate: '<b>Latest close</b><br>₹%{y:,.2f}<extra></extra>',
+    });
+
+    if (latestQuote && latestQuote.timestamp && Number.isFinite(Number(latestQuote.price))) {
+      const quoteX = latestQuote.timestamp;
+      const quoteDate = String(quoteX).slice(0, 10);
+      if (quoteDate >= dates[dates.length - 1]) {
+        traces.push({
+          x: [dates[dates.length - 1], quoteX],
+          y: [lastClose, livePrice],
+          type: 'scatter',
+          mode: 'lines+markers',
+          name: latestQuote.is_intraday ? 'Latest intraday price' : 'Latest quote',
+          line: { color: '#f8fafc', width: 2, dash: 'dot' },
+          marker: {
+            color: '#f8fafc',
+            size: [0, 9],
+            line: { color: mainColor, width: 3 },
+          },
+          hovertemplate: '<b>Latest available price</b><br>₹%{y:,.2f}<extra></extra>',
+        });
+      }
+    }
+
+    const visiblePrices = [...closes, ...ma20.filter(Number.isFinite), ...ma50.filter(Number.isFinite), livePrice];
+    const minVisiblePrice = Math.min(...visiblePrices);
+    const maxVisiblePrice = Math.max(...visiblePrices);
 
     // If target price provided, add predicted point for the next trading day (skipping weekends)
     if (targetPrice) {
@@ -105,45 +176,80 @@ async function loadStockChart(symbol, containerId, targetPrice = null) {
     const layout = {
       paper_bgcolor: 'transparent',
       plot_bgcolor: 'transparent',
-      margin: { l: 55, r: 25, t: 45, b: 35 },
+      margin: { l: 68, r: 82, t: 108, b: 48 },
       showlegend: true,
       legend: {
-        x: 0.01, y: 1.15,
+        x: 0.5, y: 1.28,
+        xanchor: 'center',
         orientation: 'h',
-        font: { color: '#94a3b8', size: 10 },
+        font: { color: '#cbd5e1', size: 11 },
         bgcolor: 'transparent',
+        itemsizing: 'constant',
       },
       xaxis: {
-        gridcolor: 'rgba(255, 255, 255, 0.05)',
+        gridcolor: 'rgba(148, 163, 184, 0.09)',
+        linecolor: 'rgba(148, 163, 184, 0.18)',
         tickfont: { color: '#94a3b8', size: 10 },
+        tickformat: '%b %Y',
         rangeslider: { visible: false },
         rangeselector: {
+          x: 0,
+          y: 1.13,
           buttons: [
             { count: 1, label: '1M', step: 'month', stepmode: 'backward' },
             { count: 3, label: '3M', step: 'month', stepmode: 'backward' },
             { count: 6, label: '6M', step: 'month', stepmode: 'backward' },
             { step: 'all', label: 'All' }
           ],
-          font: { color: '#e2e8f0', size: 10 },
-          bgcolor: '#1e293b',
-          activecolor: '#00d4ff'
+          font: { color: '#dbeafe', size: 10 },
+          bgcolor: 'rgba(30, 41, 59, 0.82)',
+          activecolor: mainColor,
+          bordercolor: 'rgba(148, 163, 184, 0.2)',
+          borderwidth: 1,
         }
       },
       yaxis: {
-        gridcolor: 'rgba(255, 255, 255, 0.05)',
+        gridcolor: 'rgba(148, 163, 184, 0.1)',
+        zeroline: false,
+        rangemode: 'normal',
+        range: [
+          minVisiblePrice * 0.97,
+          maxVisiblePrice * 1.03,
+        ],
         tickfont: { color: '#94a3b8', size: 10 },
         tickprefix: '₹',
-        title: { text: 'Stock Price', font: { color: '#94a3b8', size: 10 } }
+        tickformat: ',.0f',
+        title: { text: 'Price (INR)', font: { color: '#94a3b8', size: 10 } },
       },
+      annotations: [{
+        xref: 'paper',
+        x: 1.015,
+        y: livePrice,
+        yref: 'y',
+        text: fmtPrice(livePrice),
+        showarrow: false,
+        xanchor: 'left',
+        bgcolor: mainColor,
+        borderpad: 5,
+        font: { color: '#06111f', size: 10, family: 'Inter, sans-serif' },
+      },
+      ],
       hovermode: 'x unified',
+      hoverlabel: {
+        bgcolor: '#0f1b2d',
+        bordercolor: 'rgba(148, 163, 184, 0.25)',
+        font: { color: '#e2e8f0', family: 'Inter, sans-serif', size: 11 },
+      },
     };
 
     const config = { responsive: true, displayModeBar: false };
 
-    Plotly.newPlot(containerId, traces, layout, config);
+    await Plotly.react(containerId, traces, layout, config);
 
   } catch (err) {
     console.error('Chart load error:', err);
+    const summaryLatest = document.getElementById('home-chart-latest');
+    if (summaryLatest) summaryLatest.textContent = 'Unavailable';
   }
 }
 

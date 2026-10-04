@@ -134,21 +134,32 @@ def predict_page(ticker=None):
     if request.args.get('predict') == 'true':
         try:
             ml_result   = predictor.predict(selected)
-            prob_result = prob_eng.get_probability(selected, event=request.args.get('event'))
-            result = {**ml_result, 'probability': prob_result}
+            prob_result = prob_eng.get_probability(selected)
 
-            # Persist to DB
-            execute_query(
-                "INSERT INTO predictions "
-                "(company,prediction,probability,predicted_price,current_price,algorithm_used) "
-                "VALUES (?,?,?,?,?,?)",
-                (selected,
-                 ml_result['direction'],
-                 prob_result['p_up'],
-                 ml_result['predicted_price'],
-                 ml_result['current_price'],
-                 ml_result.get('algorithm_used', 'RandomForest'))
-            )
+            # Merge bayesian probability into result for template
+            result = {
+                **ml_result,
+                'bayesian': {
+                    'p_up':     prob_result.get('p_up', 0.5),
+                    'p_down':   prob_result.get('p_down', 0.5),
+                    'p_up_pct': prob_result.get('p_up_pct', 50.0),
+                    'signal':   prob_result.get('signal', 'HOLD'),
+                    'method':   prob_result.get('method', 'Frequentist'),
+                },
+            }
+
+            if ml_result['direction'] in {'UP', 'DOWN'}:
+                execute_query(
+                    "INSERT INTO predictions "
+                    "(company,prediction,probability,predicted_price,current_price,algorithm_used) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (selected,
+                     ml_result['direction'],
+                     ml_result['probability']['up'],
+                     ml_result['predicted_price'],
+                     ml_result['current_price'],
+                     ml_result.get('algorithm_used', 'XGBoost + Random Forest'))
+                )
         except Exception as e:
             result = {'error': str(e), 'symbol': selected}
 
@@ -328,25 +339,69 @@ def api_graph_data():
 
 @app.route('/api/predict', methods=['POST'])
 def api_predict():
-    """AJAX prediction endpoint."""
+    """AJAX prediction endpoint — returns full ML result including indicators."""
     body   = request.get_json(force=True) or {}
-    symbol = body.get('symbol', 'TCS').upper()
+    symbol = str(body.get('symbol', 'TCS')).strip().upper()
     event  = body.get('event', None)
+
+    if symbol not in STOCKS:
+        return jsonify({'success': False, 'error': f'Unknown stock symbol: {symbol}'}), 400
 
     try:
         ml   = predictor.predict(symbol)
         prob = prob_eng.get_probability(symbol, event=event)
-        execute_query(
-            "INSERT INTO predictions "
-            "(company,prediction,probability,predicted_price,current_price,algorithm_used) "
-            "VALUES (?,?,?,?,?,?)",
-            (symbol, ml['direction'], prob['p_up'],
-             ml['predicted_price'], ml['current_price'],
-             ml.get('algorithm_used', 'RF'))
-        )
-        return jsonify({'success': True, **ml, 'probability': prob})
+
+        if ml['direction'] in {'UP', 'DOWN'}:
+            execute_query(
+                "INSERT INTO predictions "
+                "(company,prediction,probability,predicted_price,current_price,algorithm_used) "
+                "VALUES (?,?,?,?,?,?)",
+                (symbol,
+                 ml['direction'],
+                 ml['probability']['up'],
+                 ml['predicted_price'],
+                 ml['current_price'],
+                 ml.get('algorithm_used', 'XGBoost + Random Forest'))
+            )
+
+        # Merge bayesian probability data into the ml response
+        response = {
+            'success':          True,
+            'symbol':           ml['symbol'],
+            'name':             ml['name'],
+            'data_date':        ml['data_date'],
+            'current_price':    ml['current_price'],
+            'predicted_price':  ml['predicted_price'],
+            'change':           ml['change'],
+            'change_pct':       ml['change_pct'],
+            'direction':        ml['direction'],
+            'performance':      ml.get('performance', {}),
+            'confidence':       ml['confidence'],       # 0.0–1.0
+            'confidence_pct':   ml['confidence_pct'],   # e.g. 73.0
+            'classifier_direction': ml['classifier_direction'],
+            'probability': {
+                'up':   ml['probability']['up'],        # from ML classifier
+                'down': ml['probability']['down'],
+            },
+            'indicators':       ml.get('indicators', {}),
+            'algorithm_used':   ml.get('algorithm_used', 'XGBoost + Random Forest'),
+            'metrics':          ml.get('metrics', {}),
+            'top_features':     ml.get('top_features', []),
+            # Bayesian probability from probability engine (bonus context)
+            'bayesian': {
+                'p_up':     prob.get('p_up', 0.5),
+                'p_down':   prob.get('p_down', 0.5),
+                'p_up_pct': prob.get('p_up_pct', 50.0),
+                'signal':   prob.get('signal', 'HOLD'),
+                'method':   prob.get('method', 'Frequentist'),
+            },
+        }
+        return jsonify(response)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 409
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/stock-history/<ticker>')
@@ -433,10 +488,10 @@ def api_market_ticker():
 
 @app.route('/api/refresh-quotes', methods=['POST'])
 def api_refresh_quotes():
-    """Refresh the cached market cards from Yahoo Finance daily bars."""
+    """Refresh the cached market cards from the latest Yahoo Finance prices."""
     quotes, errors = collector.fetch_latest_quotes()
     if quotes:
-        save_market_quotes(quotes)
+        save_market_quotes(quotes, source='Yahoo Finance')
         return jsonify({
             'success': True,
             'quotes': quotes,

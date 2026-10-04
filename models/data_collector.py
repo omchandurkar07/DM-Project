@@ -20,7 +20,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import STOCKS, DATA_PERIOD, BASE_DIR, ALPHA_VANTAGE_API_KEY
-from database import execute_sql, get_connection, get_cursor, init_db
+from database import execute_sql, fetch_one, get_connection, get_cursor, init_db
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -92,37 +92,107 @@ class DataCollector:
             df = self._synthetic_data(symbol_key)
         return df
 
+    def refresh_stock_history(self, symbol_key: str) -> dict:
+        """Refresh one stock from a real provider without replacing data with synthetic prices."""
+        info = STOCKS.get(symbol_key)
+        if not info:
+            raise ValueError(f"Unknown symbol key: {symbol_key}")
+
+        df = self._fetch_single(symbol_key, info['symbol'])
+        if df is None or df.empty:
+            raise RuntimeError(f"No historical data could be fetched for {symbol_key}")
+
+        latest_history_date = str(pd.to_datetime(df['date']).max().date())
+        latest_quote = fetch_one(
+            "SELECT date FROM market_quotes WHERE company=?", (symbol_key,)
+        )
+        if latest_quote and str(latest_quote['date']) > latest_history_date:
+            raise RuntimeError(
+                f"Fetched history for {symbol_key} ends on {latest_history_date}, "
+                f"before the latest quote on {latest_quote['date']}"
+            )
+
+        self._store(symbol_key, df)
+        return {'symbol': symbol_key, 'rows': len(df), 'latest_date': latest_history_date}
+
     def fetch_latest_quotes(self) -> tuple[dict[str, dict], dict[str, str]]:
-        """Fetch the latest daily quote for each stock from Yahoo Finance."""
+        """Fetch latest intraday quotes, falling back to the latest daily bar."""
         quotes = {}
         errors = {}
 
         for key, info in STOCKS.items():
             try:
-                history = yf.Ticker(info['symbol']).history(
+                ticker = yf.Ticker(info['symbol'])
+                history = ticker.history(
                     period='5d', auto_adjust=True
                 ).dropna(subset=['Close'])
                 if len(history) < 2:
                     errors[key] = 'Yahoo returned fewer than two daily prices'
                     continue
 
-                latest = history.iloc[-1]
+                daily_latest = history.iloc[-1]
                 previous = history.iloc[-2]
-                price = float(latest['Close'])
                 previous_price = float(previous['Close'])
+                if not np.isfinite(previous_price) or previous_price <= 0:
+                    errors[key] = 'Yahoo returned an invalid previous closing price'
+                    continue
+
+                try:
+                    intraday = ticker.history(
+                        period='1d', interval='1m', auto_adjust=True
+                    ).dropna(subset=['Close'])
+                except Exception as exc:
+                    print(
+                        f"[Quote] {key}: intraday data unavailable; "
+                        f"using daily price: {exc}"
+                    )
+                    intraday = pd.DataFrame(columns=['Close', 'High', 'Low', 'Volume'])
+                intraday = intraday[intraday['Close'] > 0]
+
+                if not intraday.empty:
+                    latest = intraday.iloc[-1]
+                    timestamp = pd.Timestamp(intraday.index[-1])
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.tz_localize('Asia/Kolkata')
+                    else:
+                        timestamp = timestamp.tz_convert('Asia/Kolkata')
+                    quote_date = timestamp.date().isoformat()
+                    quote_time = timestamp.isoformat()
+                    display_time = timestamp.strftime('%Y-%m-%d %H:%M IST')
+                    high = float(intraday['High'].max())
+                    low = float(intraday['Low'].min())
+                    volume = int(intraday['Volume'].fillna(0).sum())
+                    source = 'Yahoo Finance 1m'
+                    is_intraday = True
+                else:
+                    latest = daily_latest
+                    quote_date = history.index[-1].date().isoformat()
+                    quote_time = quote_date
+                    display_time = quote_date
+                    high = float(latest['High'])
+                    low = float(latest['Low'])
+                    volume = int(latest['Volume'])
+                    source = 'Yahoo Finance daily'
+                    is_intraday = False
+
+                price = float(latest['Close'])
                 if not np.isfinite(price) or price <= 0 or not np.isfinite(previous_price):
                     errors[key] = 'Yahoo returned an invalid price'
                     continue
 
                 change = price - previous_price
                 quotes[key] = {
-                    'date': history.index[-1].date().isoformat(),
+                    'date': quote_date,
+                    'timestamp': quote_time,
+                    'display_time': display_time,
+                    'is_intraday': is_intraday,
+                    'source': source,
                     'price': round(price, 2),
                     'change': round(change, 2),
                     'change_pct': round(change / previous_price * 100, 2),
-                    'high': round(float(latest['High']), 2),
-                    'low': round(float(latest['Low']), 2),
-                    'volume': int(latest['Volume']),
+                    'high': round(high, 2),
+                    'low': round(low, 2),
+                    'volume': volume,
                 }
             except Exception as exc:
                 errors[key] = str(exc)[:200]
@@ -273,35 +343,41 @@ class DataCollector:
         return df
 
     def _store(self, key: str, df: pd.DataFrame):
-        """Upsert rows into the stocks table after clearing existing ones."""
+        """Replace one company's history atomically; keep the old data on failure."""
         conn = get_connection()
-        cursor = get_cursor(conn)
-        
-        # Clear existing data for this company to prevent mixing old/stale/synthetic data with new data
-        execute_sql(cursor, "DELETE FROM stocks WHERE company=?", (key,))
+        try:
+            cursor = get_cursor(conn)
+            rows = []
+            for _, row in df.iterrows():
+                volume = _safe(row, 'volume')
+                rows.append((
+                    key,
+                    str(pd.to_datetime(row['date']).date()),
+                    _safe(row, 'open'),  _safe(row, 'high'),
+                    _safe(row, 'low'),   _safe(row, 'close'),
+                    int(volume) if volume is not None else 0,
+                    _safe(row, 'ma20'),  _safe(row, 'ma50'),
+                    _safe(row, 'rsi'),   _safe(row, 'macd'),
+                    _safe(row, 'signal'),
+                ))
+            if not rows:
+                raise ValueError(f"No valid history rows to store for {key}")
 
-        for _, row in df.iterrows():
-            try:
+            execute_sql(cursor, "DELETE FROM stocks WHERE company=?", (key,))
+            for row in rows:
                 execute_sql(cursor, '''
                     INSERT INTO stocks
                         (company, date, open, high, low, close,
                          volume, ma20, ma50, rsi, macd, `signal`)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    key,
-                    str(row['date']),
-                    _safe(row, 'open'),  _safe(row, 'high'),
-                    _safe(row, 'low'),   _safe(row, 'close'),
-                    int(row.get('volume', 0) or 0),
-                    _safe(row, 'ma20'),  _safe(row, 'ma50'),
-                    _safe(row, 'rsi'),   _safe(row, 'macd'),
-                    _safe(row, 'signal'),
-                ))
-            except Exception as e:
-                pass   # skip bad rows silently
+                ''', row)
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _synthetic_data(self, key: str) -> pd.DataFrame:
         """
