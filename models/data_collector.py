@@ -115,6 +115,21 @@ class DataCollector:
         self._store(symbol_key, df)
         return {'symbol': symbol_key, 'rows': len(df), 'latest_date': latest_history_date}
 
+    def refresh_all_real_history(self) -> dict[str, dict]:
+        """Refresh each stock from a real provider and report per-symbol failures."""
+        results = {}
+        for key in STOCKS:
+            try:
+                results[key] = self.refresh_stock_history(key)
+                print(
+                    f"[DataCollector] Refreshed {key}: "
+                    f"{results[key]['rows']} rows through {results[key]['latest_date']}"
+                )
+            except Exception as exc:
+                results[key] = {'error': str(exc)}
+                print(f"[DataCollector] Failed to refresh {key}: {exc}")
+        return results
+
     def fetch_latest_quotes(self) -> tuple[dict[str, dict], dict[str, str]]:
         """Fetch latest intraday quotes, falling back to the latest daily bar."""
         quotes = {}

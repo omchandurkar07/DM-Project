@@ -1,6 +1,7 @@
 """SQLite/MySQL connections, schemas, and shared query helpers."""
 
 import re
+import os
 import sqlite3
 
 from config import (
@@ -33,6 +34,9 @@ def get_connection():
     if DATABASE_BACKEND != 'sqlite':
         raise ValueError("DATABASE_BACKEND must be 'sqlite' or 'mysql'")
 
+    database_dir = os.path.dirname(DATABASE_PATH)
+    if database_dir:
+        os.makedirs(database_dir, exist_ok=True)
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

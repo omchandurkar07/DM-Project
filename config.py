@@ -14,8 +14,11 @@ ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
 # ─────────────────────────────────────────────
 # Database
 # ─────────────────────────────────────────────
-DATABASE_PATH = os.path.join(BASE_DIR, 'stockprediction.db')
+DATABASE_PATH = os.getenv('DATABASE_PATH', os.path.join(BASE_DIR, 'stockprediction.db'))
 DATABASE_BACKEND = os.getenv('DATABASE_BACKEND', 'sqlite').strip().lower()
+AUTO_REFRESH_HOURS = float(os.getenv('AUTO_REFRESH_HOURS', '0'))
+if not 0 <= AUTO_REFRESH_HOURS < float('inf'):
+    raise ValueError('AUTO_REFRESH_HOURS must be a finite number zero or greater')
 MYSQL_HOST = os.getenv('MYSQL_HOST', '127.0.0.1')
 MYSQL_PORT = int(os.getenv('MYSQL_PORT', '3306'))
 MYSQL_USER = os.getenv('MYSQL_USER', 'root')
@@ -76,4 +79,3 @@ PORT         = 5000
 # Admin Credentials
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
-

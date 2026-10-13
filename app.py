@@ -6,9 +6,14 @@ Graph Theory + Probability + Machine Learning
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from flask_cors import CORS
 import json, math, os, statistics, traceback
+import threading
+import time
 from datetime import datetime
 
-from config import STOCKS, SECTOR_COLORS, SECRET_KEY, DEBUG, HOST, PORT, ADMIN_USERNAME, ADMIN_PASSWORD
+from config import (
+    AUTO_REFRESH_HOURS, STOCKS, SECTOR_COLORS, SECRET_KEY, DEBUG, HOST, PORT,
+    ADMIN_USERNAME, ADMIN_PASSWORD,
+)
 from database import init_db, get_connection, fetch_all, fetch_one, execute_query, save_market_quotes
 from models.data_collector import DataCollector
 from models.graph          import StockGraph
@@ -32,6 +37,25 @@ graph_mdl  = StockGraph()
 prob_eng   = ProbabilityEngine()
 predictor  = PredictionModel()
 dm_eng     = DiscreteMathEngine()
+
+def _refresh_market_data_periodically():
+    """Refresh persisted real-price history at the configured interval."""
+    while True:
+        try:
+            results = collector.refresh_all_real_history()
+            updated = sum('error' not in result for result in results.values())
+            print(f"[DataRefresh] Updated history for {updated}/{len(results)} stocks.")
+        except Exception:
+            traceback.print_exc()
+        time.sleep(AUTO_REFRESH_HOURS * 3600)
+
+
+if AUTO_REFRESH_HOURS > 0:
+    threading.Thread(
+        target=_refresh_market_data_periodically,
+        name='market-data-refresh',
+        daemon=True,
+    ).start()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -341,9 +365,26 @@ def admin_page():
 
         if action == 'refresh_data':
             try:
-                collector.fetch_and_store_all()
-                messages.append({'type': 'success',
-                                 'text': '✅ Stock data refreshed successfully!'})
+                results = collector.refresh_all_real_history()
+                failed = {
+                    symbol: result['error']
+                    for symbol, result in results.items()
+                    if 'error' in result
+                }
+                updated = len(results) - len(failed)
+                if failed:
+                    details = '; '.join(
+                        f'{symbol}: {error}' for symbol, error in failed.items()
+                    )
+                    messages.append({
+                        'type': 'error',
+                        'text': f'Real history updated for {updated}/{len(results)} stocks. {details}',
+                    })
+                else:
+                    messages.append({
+                        'type': 'success',
+                        'text': f'Real stock history refreshed for all {updated} stocks.',
+                    })
             except Exception as e:
                 messages.append({'type': 'error', 'text': f'❌ {e}'})
 
@@ -368,11 +409,24 @@ def admin_page():
 
         elif action == 'full_pipeline':
             try:
-                collector.fetch_and_store_all()
+                results = collector.refresh_all_real_history()
+                failed = {
+                    symbol: result['error']
+                    for symbol, result in results.items()
+                    if 'error' in result
+                }
+                if failed:
+                    details = '; '.join(
+                        f'{symbol}: {error}' for symbol, error in failed.items()
+                    )
+                    raise RuntimeError(
+                        f"Real history updated for {len(results) - len(failed)}/"
+                        f"{len(results)} stocks; graph/model steps skipped. {details}"
+                    )
                 graph_mdl.build_graph()
                 predictor.train_all()
                 messages.append({'type': 'success',
-                                 'text': '✅ Full pipeline executed successfully!'})
+                                 'text': '✅ Full pipeline executed with real stock data!'})
             except Exception as e:
                 messages.append({'type': 'error', 'text': f'❌ {e}'})
 
@@ -596,7 +650,19 @@ def api_rebuild_graph():
 def api_refresh_all():
     """Full pipeline: fetch → graph → train."""
     try:
-        collector.fetch_and_store_all()
+        results = collector.refresh_all_real_history()
+        failed = {
+            symbol: result['error']
+            for symbol, result in results.items()
+            if 'error' in result
+        }
+        if failed:
+            return jsonify({
+                'success': False,
+                'updated': len(results) - len(failed),
+                'total': len(results),
+                'errors': failed,
+            }), 502
         graph_mdl.build_graph()
         predictor.train_all()
         return jsonify({'success': True, 'message': 'Full pipeline completed!'})
