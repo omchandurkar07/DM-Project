@@ -94,6 +94,15 @@
 .fi-bar-fill  { height:100%; background:var(--gradient-1); border-radius:4px; }
 .fi-label { font-size:.7rem; min-width:110px; font-family:'JetBrains Mono',monospace; color:var(--text-secondary); }
 .fi-pct   { font-size:.7rem; min-width:36px; text-align:right; color:#00d4ff; }
+.model-outlook {
+  border:1px solid rgba(0,212,255,.2);
+  border-radius:var(--radius-md);
+  background:rgba(0,212,255,.045);
+  padding:1rem;
+}
+.model-outlook-title { font-size:.68rem; text-transform:uppercase; letter-spacing:.12em; color:var(--text-secondary); }
+.model-outlook-signal { font-size:1.1rem; font-weight:800; }
+.model-outlook-detail { color:var(--text-secondary); font-size:.78rem; }
 </style>
 {% endblock %}
 
@@ -200,6 +209,7 @@
           {% endfor %}
         </div>
         {% endif %}
+
       </div>
     </div>
     {% endif %}
@@ -233,6 +243,16 @@
             <div class="stat-box target"><div class="label">Predicted Price</div><div class="value" id="r-pred">-</div></div>
             <div class="stat-box" id="r-change-box"><div class="label" id="r-change-label">Expected Change</div><div class="value" id="r-change">-</div></div>
             <div class="stat-box"><div class="label">Data Date</div><div class="value" id="r-date" style="font-size:.82rem;">-</div></div>
+          </div>
+
+          <div class="model-outlook mb-3">
+            <div class="model-outlook-title"><i class="bi bi-eye me-1"></i>Model Outlook</div>
+            <div class="model-outlook-signal mt-1" id="r-outlook-label">-</div>
+            <div class="model-outlook-detail mt-2" id="r-outlook-agreement">-</div>
+            <div class="model-outlook-detail mt-1" id="r-outlook-context">-</div>
+            <div class="model-outlook-detail mt-2">
+              Probabilities and indicators are context, not certainty. This is not a buy/sell instruction or financial advice.
+            </div>
           </div>
 
           <div class="row g-3">
@@ -423,6 +443,38 @@
                 <span>{{ result.bayesian.method }}</span>
               </div>
               {% endif %}
+
+              <div class="model-outlook mt-3">
+                <div class="model-outlook-title"><i class="bi bi-eye me-1"></i>Model Outlook</div>
+                <div class="model-outlook-signal mt-1 {% if result.direction == 'UP' %}text-success{% elif result.direction == 'DOWN' %}text-danger{% else %}text-secondary{% endif %}">
+                  {% if result.direction == 'UP' %}Bullish{% elif result.direction == 'DOWN' %}Bearish{% else %}Neutral{% endif %}
+                  <span class="model-outlook-detail fw-normal">— {{ result.direction }} next-session price estimate</span>
+                </div>
+                <div class="model-outlook-detail mt-2">
+                  {% if result.direction in ['UP', 'DOWN'] and result.classifier_direction == result.direction %}
+                    Price estimate and direction classifier agree ({{ result.classifier_direction }}).
+                  {% elif result.direction in ['UP', 'DOWN'] %}
+                    Price estimate and direction classifier disagree (classifier: {{ result.classifier_direction }}).
+                  {% else %}
+                    Price estimate is neutral; the direction classifier leans {{ result.classifier_direction }}.
+                  {% endif %}
+                  {% if result.bayesian %}
+                    Bayesian signal: {{ result.bayesian.signal }}.
+                  {% endif %}
+                  {% if result.indicators and result.indicators.ma20 is not none and result.indicators.ma50 is not none %}
+                    MA20 is {{ 'above' if result.indicators.ma20 >= result.indicators.ma50 else 'below' }} MA50.
+                  {% endif %}
+                  {% if result.indicators and result.indicators.rsi is not none %}
+                    RSI: {{ result.indicators.rsi }}{% if result.indicators.rsi >= 70 %} (high){% elif result.indicators.rsi <= 30 %} (low){% endif %}.
+                  {% endif %}
+                  {% if result.indicators and result.indicators.volatility is not none %}
+                    20-day volatility: {{ (result.indicators.volatility * 100)|round(2) }}%.
+                  {% endif %}
+                </div>
+                <div class="model-outlook-detail mt-2">
+                  Indicator readings and model probabilities are context, not certainty. This is not a buy/sell instruction or financial advice.
+                </div>
+              </div>
             </div>
           </div>
           {% endif %}
@@ -738,6 +790,47 @@ document.addEventListener('DOMContentLoaded', function() {
     setText('ind-macd', ind.macd   != null ? fmtNum(ind.macd, 4)             : 'N/A');
     setText('ind-vol',  ind.volatility   != null ? (ind.volatility * 100).toFixed(2) + '%' : 'N/A');
     setText('ind-chg',  ind.price_change != null ? ind.price_change.toFixed(4) + '%'       : 'N/A');
+
+    /* Human-readable summary of model signals; this is not a trading instruction. */
+    var outlookLabel = d.direction === 'UP' ? 'Bullish' :
+      d.direction === 'DOWN' ? 'Bearish' : 'Neutral';
+    var outlookLabelEl = document.getElementById('r-outlook-label');
+    if (outlookLabelEl) {
+      outlookLabelEl.textContent = outlookLabel + ' — ' + d.direction +
+        ' next-session price estimate';
+      outlookLabelEl.className = 'model-outlook-signal mt-1 ' +
+        (d.direction === 'UP' ? 'text-success' :
+          d.direction === 'DOWN' ? 'text-danger' : 'text-secondary');
+    }
+
+    var classifierDirection = d.classifier_direction || 'N/A';
+    var agreementText = d.direction === 'HOLD'
+      ? 'Price estimate is neutral; the direction classifier leans ' +
+        classifierDirection + '.'
+      : classifierDirection === d.direction
+        ? 'Price estimate and direction classifier agree (' +
+          classifierDirection + ').'
+        : 'Price estimate and direction classifier disagree (classifier: ' +
+          classifierDirection + ').';
+    if (bay.signal) agreementText += ' Bayesian signal: ' + bay.signal + '.';
+    setText('r-outlook-agreement', agreementText);
+
+    var contextParts = [];
+    if (ind.ma20 != null && ind.ma50 != null) {
+      contextParts.push('MA20 ' + (ind.ma20 >= ind.ma50 ? 'above' : 'below') +
+        ' MA50');
+    }
+    if (ind.rsi != null) {
+      contextParts.push('RSI ' + fmtNum(ind.rsi, 1) +
+        (ind.rsi >= 70 ? ' (high)' : ind.rsi <= 30 ? ' (low)' : ''));
+    }
+    if (ind.volatility != null) {
+      contextParts.push('20-day volatility ' +
+        fmtNum(ind.volatility * 100, 2) + '%');
+    }
+    setText('r-outlook-context', contextParts.length
+      ? 'Indicator context: ' + contextParts.join(' · ') + '.'
+      : 'Indicator context is unavailable for this forecast.');
 
     /* Model metrics */
     var met = d.metrics || {};

@@ -5,7 +5,7 @@ Graph Theory + Probability + Machine Learning
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from flask_cors import CORS
-import json, os, traceback
+import json, math, os, statistics, traceback
 from datetime import datetime
 
 from config import STOCKS, SECTOR_COLORS, SECRET_KEY, DEBUG, HOST, PORT, ADMIN_USERNAME, ADMIN_PASSWORD
@@ -164,6 +164,80 @@ def predict_page(ticker=None):
             result = {'error': str(e), 'symbol': selected}
 
     return render_template('prediction.html', result=result, selected=selected)
+
+
+@app.route('/compare')
+def compare_page():
+    """Compare recent price performance for up to four stocks."""
+    requested = request.args.getlist('symbol')
+    selected = list(dict.fromkeys(
+        symbol.strip().upper() for symbol in requested if symbol.strip().upper() in STOCKS
+    ))
+    selection_error = None
+
+    if not requested:
+        selected = ['TCS', 'INFY']
+    elif len(selected) != len(requested):
+        selection_error = 'One or more selected stock symbols are invalid.'
+    elif len(selected) < 2:
+        selection_error = 'Select at least two different stocks to compare.'
+    elif len(selected) > 4:
+        selection_error = 'Select no more than four stocks at a time.'
+
+    comparisons = []
+    chart_series = []
+    missing_data = []
+    if selection_error is None:
+        for symbol in selected:
+            rows = fetch_all(
+                "SELECT date,close FROM stocks WHERE company=? AND close IS NOT NULL "
+                "ORDER BY date DESC LIMIT 180",
+                (symbol,)
+            )
+            rows.reverse()
+            rows = [row for row in rows if row['close'] is not None and float(row['close']) > 0]
+            if len(rows) < 2:
+                missing_data.append(symbol)
+                continue
+
+            closes = [float(row['close']) for row in rows]
+            first_price, last_price = closes[0], closes[-1]
+            daily_returns = [
+                (current / previous) - 1
+                for previous, current in zip(closes, closes[1:])
+                if previous > 0
+            ]
+            comparisons.append({
+                'symbol': symbol,
+                'name': STOCKS[symbol]['name'],
+                'sector': STOCKS[symbol]['sector'],
+                'start_date': str(rows[0]['date']),
+                'end_date': str(rows[-1]['date']),
+                'observations': len(rows),
+                'current_price': round(last_price, 2),
+                'period_return_pct': round((last_price / first_price - 1) * 100, 2),
+                'daily_change_pct': round(daily_returns[-1] * 100, 2),
+                'annualized_volatility_pct': (
+                    round(statistics.stdev(daily_returns) * math.sqrt(252) * 100, 2)
+                    if len(daily_returns) > 1 else None
+                ),
+            })
+            chart_series.append({
+                'symbol': symbol,
+                'name': STOCKS[symbol]['name'],
+                'color': STOCKS[symbol].get('color', '#00D4FF'),
+                'dates': [str(row['date']) for row in rows],
+                'indexed_prices': [round(close / first_price * 100, 2) for close in closes],
+            })
+
+    return render_template(
+        'compare.html',
+        selected=selected,
+        comparisons=comparisons,
+        chart_series=chart_series,
+        missing_data=missing_data,
+        selection_error=selection_error,
+    )
 
 
 @app.route('/graph')

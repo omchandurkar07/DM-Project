@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+
+{% block title %}Compare Stocks — StockPredict AI{% endblock %}
+
+{% block extra_head %}
+<style>
+.compare-option {
+  display:flex;
+  align-items:center;
+  gap:.65rem;
+  min-height:46px;
+  padding:.55rem .75rem;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:var(--radius-sm);
+}
+.compare-option input { accent-color:#00d4ff; }
+.compare-table th,.compare-table td { white-space:nowrap; }
+.compare-table th { color:var(--text-secondary); font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; }
+.compare-table td { vertical-align:middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header py-2 mb-4">
+  <h1 class="gradient-text"><i class="bi bi-bar-chart-line me-2"></i>Compare Stocks</h1>
+  <p class="text-muted mb-0">Compare recent performance, daily movement, and volatility for up to four stocks.</p>
+</div>
+
+<div class="alert alert-glass info mb-4">
+  <i class="bi bi-info-circle-fill fs-5"></i>
+  <div>
+    Each stock is indexed to 100 at its first available close in the latest 180 recorded trading sessions.
+    This compares percentage performance even when histories start on different dates.
+  </div>
+</div>
+
+<div class="glass-card mb-4">
+  <div class="card-header-styled">
+    <div class="fw-bold"><i class="bi bi-sliders me-2 text-info"></i>Choose stocks</div>
+    <span class="fs-8 text-muted">Select 2–4 stocks</span>
+  </div>
+  <div class="card-body-styled">
+    <form method="get" action="{{ url_for('compare_page') }}">
+      <div class="row g-2 mb-3">
+        {% for symbol, info in stocks.items() %}
+        <div class="col-sm-6 col-lg-3">
+          <label class="compare-option">
+            <input class="form-check-input m-0" type="checkbox" name="symbol"
+                   value="{{ symbol }}" {% if symbol in selected %}checked{% endif %}>
+            <span><strong>{{ symbol }}</strong><span class="text-muted ms-1 fs-8">{{ info.name }}</span></span>
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+      <button class="btn btn-glow" type="submit">
+        <i class="bi bi-arrow-left-right"></i> Compare selected
+      </button>
+    </form>
+  </div>
+</div>
+
+{% if selection_error %}
+<div class="alert alert-glass error mb-4" role="alert">
+  <i class="bi bi-exclamation-triangle-fill fs-5"></i><div>{{ selection_error }}</div>
+</div>
+{% endif %}
+
+{% if missing_data %}
+<div class="alert alert-glass info mb-4" role="status">
+  <i class="bi bi-info-circle-fill fs-5"></i>
+  <div>Not enough historical data to compare: {{ missing_data|join(', ') }}.</div>
+</div>
+{% endif %}
+
+{% if comparisons %}
+<div class="glass-card mb-4">
+  <div class="card-header-styled">
+    <div class="fw-bold"><i class="bi bi-table me-2 text-cyan"></i>Performance summary</div>
+    <span class="fs-8 text-muted">Historical data; not a forecast</span>
+  </div>
+  <div class="card-body-styled">
+    <div class="table-responsive">
+      <table class="table table-dark table-hover compare-table mb-0">
+        <thead>
+          <tr>
+            <th>Stock</th><th>Sector</th><th>Latest close</th><th>1-day change</th>
+            <th>Return in period</th><th>Annualized volatility</th><th>Data range</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in comparisons %}
+          <tr>
+            <td><strong>{{ item.symbol }}</strong><div class="text-muted fs-8">{{ item.name }}</div></td>
+            <td>{{ item.sector }}</td>
+            <td class="mono">&#8377;{{ '%.2f'|format(item.current_price) }}</td>
+            <td class="{% if item.daily_change_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {% if item.daily_change_pct > 0 %}+{% endif %}{{ item.daily_change_pct }}%
+            </td>
+            <td class="{% if item.period_return_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {% if item.period_return_pct > 0 %}+{% endif %}{{ item.period_return_pct }}%
+            </td>
+            <td>{% if item.annualized_volatility_pct is not none %}{{ item.annualized_volatility_pct }}%{% else %}N/A{% endif %}</td>
+            <td class="fs-8">{{ item.start_date }} – {{ item.end_date }}<div class="text-muted">{{ item.observations }} closes</div></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card mb-4">
+  <div class="card-header-styled">
+    <div class="fw-bold"><i class="bi bi-graph-up me-2 text-cyan"></i>Indexed price performance</div>
+    <span class="fs-8 text-muted">Base = 100</span>
+  </div>
+  <div class="card-body-styled">
+    <div id="compare-chart" role="img" aria-label="Normalized historical stock performance comparison chart" style="height:390px;width:100%;"></div>
+  </div>
+</div>
+
+<p class="text-muted fs-8">
+  Historical returns and volatility describe past price movement only and do not predict future performance or constitute financial advice.
+</p>
+{% elif not selection_error %}
+<div class="glass-card text-center py-5 px-4">
+  <i class="bi bi-bar-chart-line text-info" style="font-size:3rem;"></i>
+  <h2 class="h5 fw-bold text-light mt-3">Comparison data unavailable</h2>
+  <p class="text-muted mb-0">Load historical stock data from the Admin page, then try comparing these stocks again.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if chart_series %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var series = {{ chart_series|tojson }};
+  var traces = series.map(function (item) {
+    return {
+      x: item.dates,
+      y: item.indexed_prices,
+      type: 'scatter',
+      mode: 'lines',
+      name: item.symbol,
+      line: { color: item.color, width: 2 },
+      hovertemplate: '%{x}<br>' + item.symbol + ': %{y:.2f}<extra></extra>'
+    };
+  });
+  Plotly.newPlot('compare-chart', traces, {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#cbd5e1' },
+    margin: { t: 20, r: 20, b: 50, l: 55 },
+    xaxis: { title: 'Date', gridcolor: 'rgba(255,255,255,.08)' },
+    yaxis: { title: 'Indexed close (base 100)', gridcolor: 'rgba(255,255,255,.08)' },
+    legend: { orientation: 'h', y: -0.22 }
+  }, { responsive: true, displaylogo: false });
+});
+</script>
+{% endif %}
+{% endblock %}
